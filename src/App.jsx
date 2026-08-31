@@ -6,7 +6,7 @@ import {
   Home, CheckSquare, Edit3, Award, Flame, Bell, Filter, Timer, 
   BellRing, ChevronRight, ChevronDown, History, Zap, Image, Eye,
   Activity, CheckCircle2, CalendarDays, User, LogOut, Lock, Sparkles,
-  ShieldCheck, Heart, ThumbsUp, AlertTriangle, FileText
+  CloudUpload, ShieldCheck
 } from 'lucide-react';
 import { 
   ResponsiveContainer, LineChart, Line, BarChart, Bar, 
@@ -14,6 +14,37 @@ import {
 } from 'recharts';
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRjm0L9b_-804uxLitV3kCw3aBeSuqqFhzm8xgPpqd81yiDs75CejBs1OTI1NCcE2F/exec";
+
+// === CLIENT-SIDE IMAGE COMPRESSOR UTILITY ===
+const compressImage = (file, maxWidth = 600, quality = 0.6) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Compress to JPEG with reduced quality (~20KB-35KB)
+        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedBase64);
+      };
+    };
+  });
+};
 
 export default function App() {
   const todayDateStr = new Date().toISOString().split('T')[0];
@@ -69,6 +100,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [sheetSchedule, setSheetSchedule] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState('');
 
   // Daily Tasks
   const [selectedTaskDate, setSelectedTaskDate] = useState(todayDateStr);
@@ -88,23 +120,18 @@ export default function App() {
 
   const [analyticsScope, setAnalyticsScope] = useState('7');
 
-  // ================= TIMESTAMP-BASED TIMERS (PERSISTENT & CROSS-DEVICE) =================
+  // Timers
   const [timerMode, setTimerMode] = useState('blocks');
-
-  // 50/10 Pomodoro State with Target EndTime
-  const [pomoState, setPomoState] = useState(() => {
-    return {
-      mode: 'work',
-      timeLeft: 50 * 60,
-      isRunning: false,
-      workDuration: 50,
-      breakDuration: 10,
-      targetEndTime: null,
-      completedSessions: 0
-    };
+  const [pomoState, setPomoState] = useState({
+    mode: 'work',
+    timeLeft: 50 * 60,
+    isRunning: false,
+    workDuration: 50,
+    breakDuration: 10,
+    targetEndTime: null,
+    completedSessions: 0
   });
 
-  // NEET Subject Blocks with Target EndTime
   const [slots, setSlots] = useState([
     { id: 'phy', name: 'Physics Block', durationMinutes: 150, timeLeft: 150 * 60, isRunning: false, targetEndTime: null, subject: 'Physics' },
     { id: 'chem', name: 'Chemistry Block', durationMinutes: 120, timeLeft: 120 * 60, isRunning: false, targetEndTime: null, subject: 'Chemistry' },
@@ -112,16 +139,12 @@ export default function App() {
     { id: 'rev', name: 'Targeted Revision', durationMinutes: 120, timeLeft: 120 * 60, isRunning: false, targetEndTime: null, subject: 'Revision' }
   ]);
 
-  // SM-2 Deck
   const [revisionDeck, setRevisionDeck] = useState([]);
-
-  // Question Bank
   const [questions, setQuestions] = useState([]);
   const [filterSubject, setFilterSubject] = useState('All');
   const [filterChapter, setFilterChapter] = useState('All');
   const [filterTopic, setFilterTopic] = useState('All');
 
-  // Mock Tests
   const [mockTests, setMockTests] = useState([]);
   const [mockFilter, setMockFilter] = useState('All');
 
@@ -134,7 +157,6 @@ export default function App() {
   const [newAttemptSeconds, setNewAttemptSeconds] = useState('');
   const [previewImage, setPreviewImage] = useState(null);
 
-  // Forms
   const [newTopic, setNewTopic] = useState({ subject: 'Physics', topic: '', nextDue: todayDateStr });
   const [newQ, setNewQ] = useState({ subject: 'Physics', chapter: '', topic: '', questionText: '', image: null, errorType: 'Conceptual Error', difficulty: 'Moderate', initialTime: 60 });
   const [newMock, setNewMock] = useState({ name: '', date: todayDateStr, timeframe: 'Weekly', physics: 0, chemistry: 0, biology: 0, negativeMarks: 0, rank: 0 });
@@ -145,43 +167,21 @@ export default function App() {
     const prefix = `brahma_user_${currentUser.username}_`;
 
     const savedTasks = localStorage.getItem(prefix + 'tasks');
-    setDailyTasks(savedTasks ? JSON.parse(savedTasks) : [
-      { id: 1, date: todayDateStr, text: 'Solve 45 Physics Numericals', completed: true, timeSlot: '09:00 - 11:30' },
-      { id: 2, date: todayDateStr, text: 'NCERT Organic Chemistry Reading', completed: true, timeSlot: '12:00 - 14:00' },
-      { id: 3, date: todayDateStr, text: 'Biology Diagram Practice', completed: false, timeSlot: '15:00 - 16:30' }
-    ]);
+    setDailyTasks(savedTasks ? JSON.parse(savedTasks) : []);
 
     const savedDwar = localStorage.getItem(prefix + 'dwar');
-    setDwarLogs(savedDwar ? JSON.parse(savedDwar) : [
-      {
-        id: 1,
-        date: todayDateStr,
-        did: 'Completed 6 hours focused study + 50 Rotational Motion MCQs.',
-        will: 'Finish 2 chapters of Botany & Revise Electrochemistry formulas.',
-        achievement: 'Maintained 85% accuracy in Mechanics numerical test.',
-        regret: 'Spent 40 mins mindlessly scrolling after lunch.',
-        score: 8.5
-      }
-    ]);
+    setDwarLogs(savedDwar ? JSON.parse(savedDwar) : []);
 
     const savedDeck = localStorage.getItem(prefix + 'deck');
-    setRevisionDeck(savedDeck ? JSON.parse(savedDeck) : [
-      { id: 1, subject: 'Physics', topic: 'Ray Optics: Lens Maker Formula', repetition: 2, interval: 6, easeFactor: 2.5, lastReviewed: '2026-08-25', nextDue: todayDateStr, retentionScore: 85 },
-      { id: 2, subject: 'Chemistry', topic: 'Aldehydes: Nucleophilic Addition', repetition: 1, interval: 1, easeFactor: 2.36, lastReviewed: '2026-08-30', nextDue: todayDateStr, retentionScore: 70 }
-    ]);
+    setRevisionDeck(savedDeck ? JSON.parse(savedDeck) : []);
 
     const savedQuestions = localStorage.getItem(prefix + 'questions');
-    setQuestions(savedQuestions ? JSON.parse(savedQuestions) : [
-      { id: 1, subject: 'Physics', chapter: 'Rotational Motion', topic: 'Moment of Inertia', questionText: 'Hollow cylinder vs Solid cylinder acceleration ratio', image: null, errorType: 'Calculation Error', difficulty: 'Hard', attempts: [110, 65, 30] }
-    ]);
+    setQuestions(savedQuestions ? JSON.parse(savedQuestions) : []);
 
     const savedMocks = localStorage.getItem(prefix + 'mocks');
-    setMockTests(savedMocks ? JSON.parse(savedMocks) : [
-      { id: 1, name: 'Major Test 1', date: '2026-08-05', timeframe: 'Monthly', physics: 125, chemistry: 140, biology: 310, total: 575, negativeMarks: 24, rank: 420 },
-      { id: 2, name: 'Major Test 2', date: '2026-08-12', timeframe: 'Weekly', physics: 135, chemistry: 145, biology: 325, total: 605, negativeMarks: 16, rank: 280 }
-    ]);
+    setMockTests(savedMocks ? JSON.parse(savedMocks) : []);
 
-    // Persistent Timers Restoration
+    // Timers Restoration
     const savedSlots = localStorage.getItem(prefix + 'slots');
     if (savedSlots) {
       const parsedSlots = JSON.parse(savedSlots);
@@ -218,7 +218,7 @@ export default function App() {
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_slots`, JSON.stringify(slots)); }, [slots, currentUser]);
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_pomo`, JSON.stringify(pomoState)); }, [pomoState, currentUser]);
 
-  // ================= GUARANTEED HIGH-VOLUME ALERTS & CHIMES =================
+  // Chime Audio Alert
   const playAlertSound = () => {
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -238,62 +238,89 @@ export default function App() {
         osc.stop(audioCtx.currentTime + start + duration);
       };
 
-      playTone(587.33, 0, 0.25); // D5
-      playTone(880.00, 0.2, 0.35); // A5
-      playTone(1174.66, 0.45, 0.6); // D6
+      playTone(587.33, 0, 0.25);
+      playTone(880.00, 0.2, 0.35);
+      playTone(1174.66, 0.45, 0.6);
     } catch (e) {
-      console.log('Chime sound alert triggered:', e);
+      console.log('Audio error:', e);
     }
   };
 
   const triggerDeviceAlert = (title, message) => {
     playAlertSound();
-    if (navigator.vibrate) {
-      navigator.vibrate([600, 300, 600, 300, 900]);
-    }
-    if ('Notification' in window) {
-      if (Notification.permission === 'granted') {
-        new Notification(title, {
-          body: message,
-          icon: '/favicon.svg',
-          requireInteraction: true
-        });
-      } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then(p => {
-          if (p === 'granted') new Notification(title, { body: message });
-        });
-      }
+    if (navigator.vibrate) navigator.vibrate([600, 300, 600, 300, 900]);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body: message, icon: '/favicon.svg', requireInteraction: true });
     }
   };
 
   const requestNotificationPermission = () => {
     if ('Notification' in window) {
       Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-          triggerDeviceAlert("🔔 Brahma Alarms Active", "Your persistent timer alerts are now configured.");
-        }
+        if (permission === 'granted') triggerDeviceAlert("🔔 Brahma Alarms Active", "Your persistent timer alerts are now configured.");
       });
     }
   };
 
-  // Google Sheets Schedule Fetch
-  const fetchGoogleSheet = async () => {
+  // ================= GOOGLE SHEETS 2-WAY FULL CLOUD BACKUP =================
+  const fetchCloudData = async () => {
     setIsSyncing(true);
+    setSyncStatusMsg('Syncing from Google Sheets...');
     try {
       const res = await fetch(GOOGLE_SCRIPT_URL, { method: 'GET', redirect: 'follow' });
       const json = await res.json();
-      if (json && json.status === 'success' && Array.isArray(json.data)) {
-        setSheetSchedule(json.data);
+      if (json && json.status === 'success') {
+        if (Array.isArray(json.schedule)) setSheetSchedule(json.schedule);
+        if (Array.isArray(json.tasks) && json.tasks.length > 0) setDailyTasks(json.tasks);
+        if (Array.isArray(json.dwar) && json.dwar.length > 0) setDwarLogs(json.dwar);
+        if (Array.isArray(json.questions) && json.questions.length > 0) {
+          const parsedQ = json.questions.map(q => ({
+            ...q,
+            attempts: typeof q.attempts === 'string' ? JSON.parse(q.attempts || '[]') : (q.attempts || [])
+          }));
+          setQuestions(parsedQ);
+        }
+        if (Array.isArray(json.mocks) && json.mocks.length > 0) setMockTests(json.mocks);
+        if (Array.isArray(json.sm2Deck) && json.sm2Deck.length > 0) setRevisionDeck(json.sm2Deck);
+        setSyncStatusMsg('Synced with Google Sheets Cloud!');
       }
     } catch (err) {
-      console.error("Fetch Sheet error:", err);
+      console.error("Cloud fetch error:", err);
+      setSyncStatusMsg('Cloud sync offline (Local Active)');
     } finally {
       setIsSyncing(false);
+      setTimeout(() => setSyncStatusMsg(''), 4000);
+    }
+  };
+
+  const backupAllToGoogleSheets = async () => {
+    setIsSyncing(true);
+    setSyncStatusMsg('Backing up all data to Cloud Sheet...');
+    try {
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'syncAll',
+          tasks: dailyTasks,
+          dwar: dwarLogs,
+          questions: questions,
+          mocks: mockTests,
+          sm2Deck: revisionDeck
+        })
+      });
+      setSyncStatusMsg('✅ 100% Backed up to Google Sheets!');
+    } catch (err) {
+      console.error("Cloud backup error:", err);
+      setSyncStatusMsg('Backup failed. Check internet connection.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncStatusMsg(''), 4000);
     }
   };
 
   useEffect(() => {
-    if (currentUser) fetchGoogleSheet();
+    if (currentUser) fetchCloudData();
   }, [currentUser]);
 
   const updateSheetItem = async (rowIndex, status, strength, scheduledDate) => {
@@ -308,25 +335,24 @@ export default function App() {
       await fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'update', rowIndex, status, strength, scheduledDate })
+        body: JSON.stringify({ action: 'updateSchedule', rowIndex, status, strength, scheduledDate })
       });
     } catch (err) {
       console.error("Sheet update sync failed:", err);
     }
   };
 
-  // ================= ABSOLUTE TIMESTAMP TICK ENGINE =================
+  // Timestamp Tick Engine
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
 
-      // Subject Block Timers
       setSlots(prevSlots =>
         prevSlots.map(slot => {
           if (slot.isRunning && slot.targetEndTime) {
             const diff = Math.round((slot.targetEndTime - now) / 1000);
             if (diff <= 0) {
-              triggerDeviceAlert(`⏰ ${slot.subject} Block Finished!`, "Excellent focus session completed! Log questions into your Error Bank.");
+              triggerDeviceAlert(`⏰ ${slot.subject} Finished!`, "Session completed! Record any errors in the Question Bank.");
               return { ...slot, timeLeft: 0, isRunning: false, targetEndTime: null };
             }
             return { ...slot, timeLeft: diff };
@@ -335,32 +361,18 @@ export default function App() {
         })
       );
 
-      // Pomodoro Engine
       setPomoState(prev => {
         if (!prev.isRunning || !prev.targetEndTime) return prev;
         const diff = Math.round((prev.targetEndTime - now) / 1000);
         if (diff <= 0) {
           if (prev.mode === 'work') {
-            triggerDeviceAlert("🔥 50-Min Focus Completed!", "Awesome study session! Take a 10-minute restorative break.");
+            triggerDeviceAlert("🔥 50-Min Focus Completed!", "Take a 10-minute restorative break.");
             const newTarget = Date.now() + (prev.breakDuration * 60 * 1000);
-            return {
-              ...prev,
-              mode: 'break',
-              timeLeft: prev.breakDuration * 60,
-              targetEndTime: newTarget,
-              isRunning: true,
-              completedSessions: prev.completedSessions + 1
-            };
+            return { ...prev, mode: 'break', timeLeft: prev.breakDuration * 60, targetEndTime: newTarget, isRunning: true, completedSessions: prev.completedSessions + 1 };
           } else {
             triggerDeviceAlert("☕ 10-Min Break Over!", "Ready to begin your next 50-minute study sprint?");
             const newTarget = Date.now() + (prev.workDuration * 60 * 1000);
-            return {
-              ...prev,
-              mode: 'work',
-              timeLeft: prev.workDuration * 60,
-              targetEndTime: newTarget,
-              isRunning: true
-            };
+            return { ...prev, mode: 'work', timeLeft: prev.workDuration * 60, targetEndTime: newTarget, isRunning: true };
           }
         }
         return { ...prev, timeLeft: diff };
@@ -370,16 +382,12 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Timer Controls
   const toggleBlockTimer = (id) => {
     setSlots(slots.map(s => {
       if (s.id === id) {
-        if (s.isRunning) {
-          return { ...s, isRunning: false, targetEndTime: null };
-        } else {
-          const currentRemaining = s.timeLeft > 0 ? s.timeLeft : s.durationMinutes * 60;
-          return { ...s, isRunning: true, timeLeft: currentRemaining, targetEndTime: Date.now() + (currentRemaining * 1000) };
-        }
+        if (s.isRunning) return { ...s, isRunning: false, targetEndTime: null };
+        const currentRemaining = s.timeLeft > 0 ? s.timeLeft : s.durationMinutes * 60;
+        return { ...s, isRunning: true, timeLeft: currentRemaining, targetEndTime: Date.now() + (currentRemaining * 1000) };
       }
       return s;
     }));
@@ -394,23 +402,13 @@ export default function App() {
       setPomoState({ ...pomoState, isRunning: false, targetEndTime: null });
     } else {
       const remaining = pomoState.timeLeft > 0 ? pomoState.timeLeft : (pomoState.mode === 'work' ? pomoState.workDuration : pomoState.breakDuration) * 60;
-      setPomoState({
-        ...pomoState,
-        isRunning: true,
-        timeLeft: remaining,
-        targetEndTime: Date.now() + (remaining * 1000)
-      });
+      setPomoState({ ...pomoState, isRunning: true, timeLeft: remaining, targetEndTime: Date.now() + (remaining * 1000) });
     }
   };
 
   const resetPomoTimer = () => {
     const duration = pomoState.mode === 'work' ? pomoState.workDuration : pomoState.breakDuration;
-    setPomoState({
-      ...pomoState,
-      timeLeft: duration * 60,
-      isRunning: false,
-      targetEndTime: null
-    });
+    setPomoState({ ...pomoState, timeLeft: duration * 60, isRunning: false, targetEndTime: null });
   };
 
   const formatTime = (seconds) => {
@@ -478,7 +476,6 @@ export default function App() {
   const handleSaveDwar = (e) => {
     e.preventDefault();
     if (!dwarForm.did.trim() && !dwarForm.will.trim()) return;
-    
     const existingIndex = dwarLogs.findIndex(d => d.date === dwarForm.date);
     if (existingIndex > -1) {
       const updated = [...dwarLogs];
@@ -573,14 +570,12 @@ export default function App() {
     return true;
   });
 
-  const handleImageUpload = (e) => {
+  // Compressed Image Upload
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewQ(prev => ({ ...prev, image: reader.result }));
-      };
-      reader.readAsDataURL(file);
+      const compressedData = await compressImage(file, 600, 0.6);
+      setNewQ(prev => ({ ...prev, image: compressedData }));
     }
   };
 
@@ -655,7 +650,7 @@ export default function App() {
     return m.timeframe === mockFilter;
   });
 
-  // ================= RENDER LOGIN SCREEN IF NOT AUTHENTICATED =================
+  // ================= RENDER LOGIN SCREEN =================
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
@@ -722,7 +717,7 @@ export default function App() {
     );
   }
 
-  // ================= MAIN AUTHENTICATED DASHBOARD =================
+  // ================= MAIN DASHBOARD =================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Header */}
@@ -740,33 +735,49 @@ export default function App() {
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Cloud Backup Button */}
           <button 
-            onClick={requestNotificationPermission}
-            className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 text-xs text-amber-400 font-medium transition"
-          >
-            <BellRing className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Alerts</span>
-          </button>
-          
-          <button 
-            onClick={fetchGoogleSheet}
+            onClick={backupAllToGoogleSheets}
             disabled={isSyncing}
-            className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 text-xs text-emerald-400 font-medium transition"
+            className="flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-full border border-amber-500/50 text-xs text-white font-semibold shadow-md shadow-amber-600/20 transition"
+          >
+            <CloudUpload className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Backup to Google Sheet</span>
+          </button>
+
+          <button 
+            onClick={fetchCloudData}
+            disabled={isSyncing}
+            className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 text-xs text-emerald-400 font-medium transition"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Syncing...' : 'Sync Sheet'}</span>
+            <span className="hidden sm:inline">Fetch Cloud</span>
+          </button>
+
+          <button 
+            onClick={requestNotificationPermission}
+            className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-full border border-slate-700 text-xs text-amber-400 font-medium transition"
+          >
+            <BellRing className="w-3.5 h-3.5" />
           </button>
 
           <button 
             onClick={handleLogout}
             title="Sign Out"
-            className="flex items-center space-x-1 bg-rose-950/60 hover:bg-rose-900/80 px-3 py-1.5 rounded-full border border-rose-800/60 text-xs text-rose-300 font-semibold transition ml-2"
+            className="flex items-center space-x-1 bg-rose-950/60 hover:bg-rose-900/80 px-3 py-1.5 rounded-full border border-rose-800/60 text-xs text-rose-300 font-semibold transition"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </header>
+
+      {/* Sync Status Banner */}
+      {syncStatusMsg && (
+        <div className="bg-amber-950/70 border-b border-amber-800/80 px-4 py-1.5 text-center text-xs text-amber-300 font-medium transition animate-pulse">
+          {syncStatusMsg}
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <nav className="flex space-x-1 p-2 bg-slate-900 border-b border-slate-800 text-sm overflow-x-auto">
@@ -1478,7 +1489,7 @@ export default function App() {
                   <AlertCircle className="w-5 h-5 text-amber-400" />
                   <span>Smart Diagnostic Question Bank</span>
                 </h2>
-                <p className="text-xs text-slate-400">Hierarchical filtering, diagram picture support, solve speed progression, and error tagging.</p>
+                <p className="text-xs text-slate-400">Hierarchical filtering, auto-compressed diagram support, solve speed progression, and error tagging.</p>
               </div>
               <button onClick={() => setIsModalOpen(true)} className="flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2 rounded-xl text-xs font-medium transition shadow-lg shadow-amber-600/20">
                 <PlusCircle className="w-4 h-4" />
@@ -1584,13 +1595,13 @@ export default function App() {
                             onClick={() => setPreviewImage(q.image)}
                           />
                           <div>
-                            <span className="text-[11px] font-bold text-slate-300 block">Question Diagram / Graph Attached</span>
+                            <span className="text-[11px] font-bold text-slate-300 block">Question Diagram Attached</span>
                             <button 
                               onClick={() => setPreviewImage(q.image)}
                               className="text-xs text-amber-400 hover:underline flex items-center space-x-1 mt-0.5"
                             >
                               <Eye className="w-3.5 h-3.5" />
-                              <span>Click to enlarge full diagram</span>
+                              <span>Click to enlarge diagram</span>
                             </button>
                           </div>
                         </div>
@@ -1838,7 +1849,7 @@ export default function App() {
               <div>
                 <label className="block text-slate-400 mb-1 font-semibold flex items-center space-x-1.5">
                   <Image className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Attach Question Picture / Diagram (Optional)</span>
+                  <span>Attach Question Picture / Diagram (Auto-Compressed)</span>
                 </label>
                 <input 
                   type="file" 
