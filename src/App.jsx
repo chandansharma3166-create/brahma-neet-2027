@@ -5,7 +5,8 @@ import {
   BrainCircuit, Calendar, TrendingUp, BookOpen, ExternalLink,
   Home, CheckSquare, Edit3, Award, Flame, Bell, Filter, Timer, 
   BellRing, ChevronRight, ChevronDown, History, Zap, Image, Eye,
-  Activity, CheckCircle2, CalendarDays
+  Activity, CheckCircle2, CalendarDays, User, LogOut, Lock, Sparkles,
+  ShieldCheck, Heart, ThumbsUp, AlertTriangle, FileText
 } from 'lucide-react';
 import { 
   ResponsiveContainer, LineChart, Line, BarChart, Bar, 
@@ -15,29 +16,84 @@ import {
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRjm0L9b_-804uxLitV3kCw3aBeSuqqFhzm8xgPpqd81yiDs75CejBs1OTI1NCcE2F/exec";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('home');
   const todayDateStr = new Date().toISOString().split('T')[0];
 
-  // 1. Google Sheets Live Schedule
+  // ================= AUTHENTICATION & MULTI-USER STATE =================
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('brahma_active_session');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [authForm, setAuthForm] = useState({ username: '', password: '', isRegister: false });
+  const [authError, setAuthError] = useState('');
+
+  const handleAuthSubmit = (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const users = JSON.parse(localStorage.getItem('brahma_registered_users') || '{}');
+    const u = authForm.username.trim().toLowerCase();
+    const p = authForm.password.trim();
+
+    if (!u || !p) {
+      setAuthError('Please enter both username and password.');
+      return;
+    }
+
+    if (authForm.isRegister) {
+      if (users[u]) {
+        setAuthError('Username already exists. Please login instead.');
+        return;
+      }
+      users[u] = { username: u, password: p, createdAt: todayDateStr };
+      localStorage.setItem('brahma_registered_users', JSON.stringify(users));
+      const session = { username: u };
+      localStorage.setItem('brahma_active_session', JSON.stringify(session));
+      setCurrentUser(session);
+    } else {
+      if (!users[u] || users[u].password !== p) {
+        setAuthError('Invalid username or password.');
+        return;
+      }
+      const session = { username: u };
+      localStorage.setItem('brahma_active_session', JSON.stringify(session));
+      setCurrentUser(session);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('brahma_active_session');
+    setCurrentUser(null);
+  };
+
+  // ================= USER-ISOLATED DATA HOOKS =================
+  const userKey = currentUser ? currentUser.username : 'guest';
+
+  const [activeTab, setActiveTab] = useState('home');
+
+  // Google Sheets Live Schedule
   const [sheetSchedule, setSheetSchedule] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 2. Daily Tasks & Date Filtering
+  // Daily Tasks
   const [selectedTaskDate, setSelectedTaskDate] = useState(todayDateStr);
-  const [dailyTasks, setDailyTasks] = useState(() => {
-    const saved = localStorage.getItem('brahma_daily_tasks');
-    return saved ? JSON.parse(saved) : [
-      { id: 1, date: todayDateStr, text: 'Solve 45 Physics Numericals (Kinematics)', completed: true, timeSlot: '09:00 - 11:30' },
-      { id: 2, date: todayDateStr, text: 'NCERT Organic Chemistry Line-by-Line Reading', completed: true, timeSlot: '12:00 - 14:00' },
-      { id: 3, date: todayDateStr, text: 'Cell Biology Diagram Practice & Flashcards', completed: false, timeSlot: '15:00 - 16:30' }
-    ];
-  });
+  const [dailyTasks, setDailyTasks] = useState([]);
   const [newTaskInput, setNewTaskInput] = useState({ text: '', timeSlot: '' });
 
-  // Execution Analytics Filter Scope
-  const [analyticsScope, setAnalyticsScope] = useState('7'); // '7', '30', 'all'
+  // DWAR Journal & Analytics State
+  const [dwarLogs, setDwarLogs] = useState([]);
+  const [dwarForm, setDwarForm] = useState({
+    date: todayDateStr,
+    did: '',
+    will: '',
+    achievement: '',
+    regret: '',
+    score: 8
+  });
 
-  // 3. 50/10 Pomodoro + Standard Block Timers
+  // Analytics Scope
+  const [analyticsScope, setAnalyticsScope] = useState('7');
+
+  // Pomodoro & Slots
   const [timerMode, setTimerMode] = useState('blocks');
   const [pomoState, setPomoState] = useState({
     mode: 'work',
@@ -55,62 +111,20 @@ export default function App() {
     { id: 'rev', name: 'Targeted Revision', durationMinutes: 120, timeLeft: 120 * 60, isRunning: false, subject: 'Revision' }
   ]);
 
-  // 4. Adaptive Spaced Repetition (SM-2) Deck
-  const [revisionDeck, setRevisionDeck] = useState(() => {
-    const saved = localStorage.getItem('brahma_sm2_deck');
-    return saved ? JSON.parse(saved) : [
-      { id: 1, subject: 'Physics', topic: 'Ray Optics: Lens Maker Formula', repetition: 2, interval: 6, easeFactor: 2.5, lastReviewed: '2026-08-25', nextDue: todayDateStr, retentionScore: 85 },
-      { id: 2, subject: 'Chemistry', topic: 'Aldehydes: Nucleophilic Addition', repetition: 1, interval: 1, easeFactor: 2.36, lastReviewed: '2026-08-30', nextDue: todayDateStr, retentionScore: 70 },
-      { id: 3, subject: 'Biology', topic: 'Plant Kingdom: Life Cycles', repetition: 3, interval: 14, easeFactor: 2.6, lastReviewed: '2026-08-17', nextDue: '2026-09-05', retentionScore: 95 }
-    ];
-  });
+  // SM-2 Deck
+  const [revisionDeck, setRevisionDeck] = useState([]);
 
-  // 5. Hierarchical Question Bank with Image & Attempts
-  const [questions, setQuestions] = useState(() => {
-    const saved = localStorage.getItem('brahma_questions_v3');
-    return saved ? JSON.parse(saved) : [
-      { 
-        id: 1, 
-        subject: 'Physics', 
-        chapter: 'Rotational Motion', 
-        topic: 'Moment of Inertia', 
-        questionText: 'Hollow cylinder vs Solid cylinder rolling acceleration ratio down an incline.',
-        image: null,
-        errorType: 'Calculation Error',
-        difficulty: 'Hard',
-        attempts: [110, 65, 30]
-      },
-      { 
-        id: 2, 
-        subject: 'Chemistry', 
-        chapter: 'Thermodynamics', 
-        topic: 'Entropy & Gibbs Energy', 
-        questionText: 'Spontaneity criteria when delta H is positive and delta S is positive.',
-        image: null,
-        errorType: 'Conceptual Error',
-        difficulty: 'Moderate',
-        attempts: [85, 40]
-      },
-      { 
-        id: 3, 
-        subject: 'Biology', 
-        chapter: 'Molecular Basis of Inheritance', 
-        topic: 'Lac Operon', 
-        questionText: 'Identify labels A, B, C from the NCERT Lac Operon transcription diagram.',
-        image: null,
-        errorType: 'Misread Question',
-        difficulty: 'Easy',
-        attempts: [45, 18, 12]
-      }
-    ];
-  });
-
-  // Filters
+  // Question Bank
+  const [questions, setQuestions] = useState([]);
   const [filterSubject, setFilterSubject] = useState('All');
   const [filterChapter, setFilterChapter] = useState('All');
   const [filterTopic, setFilterTopic] = useState('All');
 
-  // Modals & Image Viewer
+  // Mock Tests
+  const [mockTests, setMockTests] = useState([]);
+  const [mockFilter, setMockFilter] = useState('All');
+
+  // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
   const [isMockModalOpen, setIsMockModalOpen] = useState(false);
@@ -121,29 +135,58 @@ export default function App() {
 
   // Forms
   const [newTopic, setNewTopic] = useState({ subject: 'Physics', topic: '', nextDue: todayDateStr });
-  const [newQ, setNewQ] = useState({ 
-    subject: 'Physics', 
-    chapter: '', 
-    topic: '', 
-    questionText: '', 
-    image: null,
-    errorType: 'Conceptual Error', 
-    difficulty: 'Moderate',
-    initialTime: 60 
-  });
-
-  // Mock Tests
-  const [mockTests, setMockTests] = useState(() => {
-    const saved = localStorage.getItem('brahma_mock_telemetry');
-    return saved ? JSON.parse(saved) : [
-      { id: 1, name: 'Major Test 1', date: '2026-08-05', timeframe: 'Monthly', physics: 125, chemistry: 140, biology: 310, total: 575, negativeMarks: 24, rank: 420 },
-      { id: 2, name: 'Major Test 2', date: '2026-08-12', timeframe: 'Weekly', physics: 135, chemistry: 145, biology: 325, total: 605, negativeMarks: 16, rank: 280 },
-      { id: 3, name: 'Major Test 3', date: '2026-08-19', timeframe: 'Weekly', physics: 140, chemistry: 152, biology: 335, total: 627, negativeMarks: 12, rank: 195 },
-      { id: 4, name: 'Major Test 4', date: '2026-08-26', timeframe: 'Monthly', physics: 155, chemistry: 160, biology: 345, total: 660, negativeMarks: 8, rank: 85 }
-    ];
-  });
-  const [mockFilter, setMockFilter] = useState('All');
+  const [newQ, setNewQ] = useState({ subject: 'Physics', chapter: '', topic: '', questionText: '', image: null, errorType: 'Conceptual Error', difficulty: 'Moderate', initialTime: 60 });
   const [newMock, setNewMock] = useState({ name: '', date: todayDateStr, timeframe: 'Weekly', physics: 0, chemistry: 0, biology: 0, negativeMarks: 0, rank: 0 });
+
+  // Load User Data upon Session Change
+  useEffect(() => {
+    if (!currentUser) return;
+    const prefix = `brahma_user_${currentUser.username}_`;
+
+    const savedTasks = localStorage.getItem(prefix + 'tasks');
+    setDailyTasks(savedTasks ? JSON.parse(savedTasks) : [
+      { id: 1, date: todayDateStr, text: 'Solve 45 Physics Numericals', completed: true, timeSlot: '09:00 - 11:30' },
+      { id: 2, date: todayDateStr, text: 'NCERT Organic Chemistry Reading', completed: true, timeSlot: '12:00 - 14:00' },
+      { id: 3, date: todayDateStr, text: 'Biology Diagram Practice', completed: false, timeSlot: '15:00 - 16:30' }
+    ]);
+
+    const savedDwar = localStorage.getItem(prefix + 'dwar');
+    setDwarLogs(savedDwar ? JSON.parse(savedDwar) : [
+      {
+        id: 1,
+        date: todayDateStr,
+        did: 'Completed 6 hours focused study + 50 Rotational Motion MCQs.',
+        will: 'Finish 2 chapters of Botany & Revise Electrochemistry formulas.',
+        achievement: 'Maintained 85% accuracy in Mechanics numerical test.',
+        regret: 'Spent 40 mins mindlessly scrolling after lunch.',
+        score: 8.5
+      }
+    ]);
+
+    const savedDeck = localStorage.getItem(prefix + 'deck');
+    setRevisionDeck(savedDeck ? JSON.parse(savedDeck) : [
+      { id: 1, subject: 'Physics', topic: 'Ray Optics: Lens Maker Formula', repetition: 2, interval: 6, easeFactor: 2.5, lastReviewed: '2026-08-25', nextDue: todayDateStr, retentionScore: 85 },
+      { id: 2, subject: 'Chemistry', topic: 'Aldehydes: Nucleophilic Addition', repetition: 1, interval: 1, easeFactor: 2.36, lastReviewed: '2026-08-30', nextDue: todayDateStr, retentionScore: 70 }
+    ]);
+
+    const savedQuestions = localStorage.getItem(prefix + 'questions');
+    setQuestions(savedQuestions ? JSON.parse(savedQuestions) : [
+      { id: 1, subject: 'Physics', chapter: 'Rotational Motion', topic: 'Moment of Inertia', questionText: 'Hollow cylinder vs Solid cylinder acceleration ratio', image: null, errorType: 'Calculation Error', difficulty: 'Hard', attempts: [110, 65, 30] }
+    ]);
+
+    const savedMocks = localStorage.getItem(prefix + 'mocks');
+    setMockTests(savedMocks ? JSON.parse(savedMocks) : [
+      { id: 1, name: 'Major Test 1', date: '2026-08-05', timeframe: 'Monthly', physics: 125, chemistry: 140, biology: 310, total: 575, negativeMarks: 24, rank: 420 },
+      { id: 2, name: 'Major Test 2', date: '2026-08-12', timeframe: 'Weekly', physics: 135, chemistry: 145, biology: 325, total: 605, negativeMarks: 16, rank: 280 }
+    ]);
+  }, [currentUser]);
+
+  // Sync back to per-user LocalStorage
+  useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_tasks`, JSON.stringify(dailyTasks)); }, [dailyTasks, currentUser]);
+  useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_dwar`, JSON.stringify(dwarLogs)); }, [dwarLogs, currentUser]);
+  useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_deck`, JSON.stringify(revisionDeck)); }, [revisionDeck, currentUser]);
+  useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_questions`, JSON.stringify(questions)); }, [questions, currentUser]);
+  useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_mocks`, JSON.stringify(mockTests)); }, [mockTests, currentUser]);
 
   // Web Audio Synth Notification
   const playAlertSound = () => {
@@ -176,16 +219,10 @@ export default function App() {
   const requestNotificationPermission = () => {
     if ('Notification' in window) {
       Notification.requestPermission().then(permission => {
-        if (permission === 'granted') triggerDeviceAlert("🔔 Alerts Enabled", "Brahma NEET notification engine is active.");
+        if (permission === 'granted') triggerDeviceAlert("🔔 Alerts Enabled", "Brahma notification system active.");
       });
     }
   };
-
-  // LocalStorage Sync
-  useEffect(() => { localStorage.setItem('brahma_daily_tasks', JSON.stringify(dailyTasks)); }, [dailyTasks]);
-  useEffect(() => { localStorage.setItem('brahma_sm2_deck', JSON.stringify(revisionDeck)); }, [revisionDeck]);
-  useEffect(() => { localStorage.setItem('brahma_questions_v3', JSON.stringify(questions)); }, [questions]);
-  useEffect(() => { localStorage.setItem('brahma_mock_telemetry', JSON.stringify(mockTests)); }, [mockTests]);
 
   // Google Sheets Fetch
   const fetchGoogleSheet = async () => {
@@ -204,8 +241,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchGoogleSheet();
-  }, []);
+    if (currentUser) fetchGoogleSheet();
+  }, [currentUser]);
 
   const updateSheetItem = async (rowIndex, status, strength, scheduledDate) => {
     setSheetSchedule(prev => prev.map(item => item.rowIndex === rowIndex ? {
@@ -226,7 +263,7 @@ export default function App() {
     }
   };
 
-  // Timer Tick
+  // Timer Tick Engine
   useEffect(() => {
     const timer = setInterval(() => {
       setSlots(prevSlots =>
@@ -243,7 +280,7 @@ export default function App() {
         if (!prev.isRunning || prev.timeLeft <= 0) return prev;
         if (prev.timeLeft === 1) {
           if (prev.mode === 'work') {
-            triggerDeviceAlert("🔥 50-Min Session Complete!", "Great focus! Take a 10-minute break.");
+            triggerDeviceAlert("🔥 50-Min Session Complete!", "Take a 10-minute restorative break.");
             return { ...prev, mode: 'break', timeLeft: prev.breakDuration * 60, completedSessions: prev.completedSessions + 1 };
           } else {
             triggerDeviceAlert("☕ 10-Min Break Over!", "Ready to start your next 50-minute study block?");
@@ -263,7 +300,7 @@ export default function App() {
     return `${hrs > 0 ? `${hrs}h ` : ''}${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
   };
 
-  // Task Handlers
+  // Task Helpers
   const displayedTasks = dailyTasks.filter(t => t.date === selectedTaskDate);
   const completedTodayCount = displayedTasks.filter(t => t.completed).length;
   const progressPercent = displayedTasks.length > 0 ? Math.round((completedTodayCount / displayedTasks.length) * 100) : 0;
@@ -289,15 +326,12 @@ export default function App() {
     setDailyTasks(dailyTasks.filter(t => t.id !== id));
   };
 
-  // === DEDICATED EXECUTION ANALYTICS ENGINE ===
+  // Execution Analytics
   const generateExecutionAnalytics = () => {
-    // Group all tasks by date
     const dateMap = {};
     dailyTasks.forEach(task => {
       const d = task.date || todayDateStr;
-      if (!dateMap[d]) {
-        dateMap[d] = { date: d, total: 0, completed: 0, tasks: [] };
-      }
+      if (!dateMap[d]) dateMap[d] = { date: d, total: 0, completed: 0, tasks: [] };
       dateMap[d].total += 1;
       if (task.completed) dateMap[d].completed += 1;
       dateMap[d].tasks.push(task);
@@ -308,12 +342,8 @@ export default function App() {
       rate: item.total > 0 ? Math.round((item.completed / item.total) * 100) : 0
     })).sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    // Filter by Scope
-    if (analyticsScope === '7') {
-      datesArray = datesArray.slice(-7);
-    } else if (analyticsScope === '30') {
-      datesArray = datesArray.slice(-30);
-    }
+    if (analyticsScope === '7') datesArray = datesArray.slice(-7);
+    else if (analyticsScope === '30') datesArray = datesArray.slice(-30);
 
     const totalTasksInRange = datesArray.reduce((acc, curr) => acc + curr.total, 0);
     const completedTasksInRange = datesArray.reduce((acc, curr) => acc + curr.completed, 0);
@@ -323,6 +353,29 @@ export default function App() {
   };
 
   const executionAnalytics = generateExecutionAnalytics();
+
+  // DWAR Journal Handlers
+  const handleSaveDwar = (e) => {
+    e.preventDefault();
+    if (!dwarForm.did.trim() && !dwarForm.will.trim()) return;
+    
+    // Replace if date already exists or add new
+    const existingIndex = dwarLogs.findIndex(d => d.date === dwarForm.date);
+    if (existingIndex > -1) {
+      const updated = [...dwarLogs];
+      updated[existingIndex] = { id: Date.now(), ...dwarForm, score: Number(dwarForm.score) };
+      setDwarLogs(updated);
+    } else {
+      setDwarLogs([{ id: Date.now(), ...dwarForm, score: Number(dwarForm.score) }, ...dwarLogs]);
+    }
+    setDwarForm({ date: todayDateStr, did: '', will: '', achievement: '', regret: '', score: 8 });
+  };
+
+  const deleteDwarLog = (id) => {
+    setDwarLogs(dwarLogs.filter(d => d.id !== id));
+  };
+
+  const dwarChartData = [...dwarLogs].sort((a, b) => new Date(a.date) - new Date(b.date)).slice(-14);
 
   // SM-2 Helpers
   const dueRevisionsToday = revisionDeck.filter(item => item.nextDue <= todayDateStr);
@@ -483,6 +536,74 @@ export default function App() {
     return m.timeframe === mockFilter;
   });
 
+  // ================= RENDER LOGIN SCREEN IF NOT AUTHENTICATED =================
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
+          <div className="text-center space-y-2">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center font-bold text-2xl text-white shadow-xl shadow-orange-500/30">
+              🕉️
+            </div>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+              Brahma NEET 2027 Portal
+            </h1>
+            <p className="text-xs text-slate-400">Personalized Cognitive Telemetry & Study Space</p>
+          </div>
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4 text-xs">
+            {authError && (
+              <div className="bg-rose-950/60 border border-rose-800/80 p-3 rounded-xl text-rose-300 font-medium text-center">
+                {authError}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-slate-400 font-semibold mb-1">Aspirant Username / Roll</label>
+              <input 
+                type="text" 
+                required
+                placeholder="e.g. chandan_neet" 
+                value={authForm.username}
+                onChange={(e) => setAuthForm({ ...authForm, username: e.target.value })}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-amber-500 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 font-semibold mb-1">Password</label>
+              <input 
+                type="password" 
+                required
+                placeholder="••••••••" 
+                value={authForm.password}
+                onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-amber-500 outline-none"
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white py-3 rounded-xl font-bold text-sm transition shadow-lg shadow-orange-600/20 mt-2"
+            >
+              {authForm.isRegister ? 'Create Independent Study Account' : 'Sign In to Dashboard'}
+            </button>
+          </form>
+
+          <div className="text-center pt-2 border-t border-slate-800">
+            <button 
+              onClick={() => { setAuthForm({ ...authForm, isRegister: !authForm.isRegister }); setAuthError(''); }}
+              className="text-xs text-amber-400 hover:underline font-medium"
+            >
+              {authForm.isRegister ? 'Already have an account? Sign In' : 'New Aspirant? Create Your Private Account'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ================= MAIN AUTHENTICATED DASHBOARD =================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Header */}
@@ -495,7 +616,7 @@ export default function App() {
             <h1 className="text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
               Brahma NEET 2027 Command Center
             </h1>
-            <p className="text-xs text-slate-400">Target: 700+ | High-Yield Cognitive System</p>
+            <p className="text-xs text-slate-400">Target: 700+ | Logged in as: <strong className="text-amber-400 uppercase font-mono">{currentUser.username}</strong></p>
           </div>
         </div>
 
@@ -505,7 +626,7 @@ export default function App() {
             className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 text-xs text-amber-400 font-medium transition"
           >
             <BellRing className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Enable Alerts</span>
+            <span className="hidden sm:inline">Alerts</span>
           </button>
           
           <button 
@@ -516,14 +637,24 @@ export default function App() {
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Syncing...' : 'Sync Sheet'}</span>
           </button>
+
+          <button 
+            onClick={handleLogout}
+            title="Sign Out"
+            className="flex items-center space-x-1 bg-rose-950/60 hover:bg-rose-900/80 px-3 py-1.5 rounded-full border border-rose-800/60 text-xs text-rose-300 font-semibold transition ml-2"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Logout</span>
+          </button>
         </div>
       </header>
 
-      {/* Tabs */}
+      {/* Navigation Tabs */}
       <nav className="flex space-x-1 p-2 bg-slate-900 border-b border-slate-800 text-sm overflow-x-auto">
         {[
           { id: 'home', label: 'Daily Command (Home)', icon: Home },
-          { id: 'analytics', label: 'Execution Analytics & History', icon: Activity },
+          { id: 'dwar', label: 'D.W.A.R. Self-Analysis', icon: Sparkles },
+          { id: 'analytics', label: 'Execution Analytics', icon: Activity },
           { id: 'daily', label: 'Timers & Macro Schedule', icon: Clock },
           { id: 'spaced', label: 'Adaptive Revision (SM-2)', icon: RotateCcw },
           { id: 'questions', label: 'Diagnostic Question Bank', icon: AlertCircle },
@@ -547,7 +678,7 @@ export default function App() {
         })}
       </nav>
 
-      {/* Main Content Area */}
+      {/* Main Container */}
       <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto space-y-6">
         
         {/* TAB 0: HOME PAGE */}
@@ -598,18 +729,13 @@ export default function App() {
 
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
                 <div>
-                  <span className="text-xs uppercase font-bold text-slate-400">Focus Timers State</span>
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    {slots.map(s => (
-                      <div key={s.id} className="bg-slate-950/50 p-2 rounded-xl border border-slate-800 text-center">
-                        <span className="block text-[10px] text-slate-400">{s.subject}</span>
-                        <span className="text-xs font-bold font-mono text-amber-400">{Math.floor(s.timeLeft / 60)}m left</span>
-                      </div>
-                    ))}
-                  </div>
+                  <span className="text-xs uppercase font-bold text-slate-400">D.W.A.R. Quick Status</span>
+                  <p className="text-xs text-slate-300 mt-2 line-clamp-2">
+                    {dwarLogs.find(d => d.date === todayDateStr)?.did || 'No DWAR self-analysis submitted yet for today.'}
+                  </p>
                 </div>
-                <button onClick={() => setActiveTab('daily')} className="text-xs text-amber-400 hover:underline mt-2 text-left font-medium">
-                  Open Timer Control →
+                <button onClick={() => setActiveTab('dwar')} className="text-xs text-amber-400 hover:underline mt-2 text-left font-medium">
+                  Open D.W.A.R. Journal →
                 </button>
               </div>
             </div>
@@ -697,7 +823,197 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 1: DEDICATED EXECUTION ANALYTICS & LONG-TERM HISTORY */}
+        {/* TAB 1: D.W.A.R. FRAMEWORK SELF-ANALYSIS (DR. ABHIMANYU KUMAWAT) */}
+        {activeTab === 'dwar' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-lg font-bold flex items-center space-x-2">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <span>D.W.A.R. Daily Self-Analysis Framework</span>
+                </h2>
+                <p className="text-xs text-slate-400">Dr. Abhimanyu Kumawat's 4-Pillar Daily Self Evaluation: Did • Will • Achievement • Regret</p>
+              </div>
+            </div>
+
+            {/* DWAR Logging Box */}
+            <form onSubmit={handleSaveDwar} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
+                  <Edit3 className="w-4 h-4 text-amber-400" />
+                  <span>Submit D.W.A.R. Evaluation</span>
+                </span>
+                <input 
+                  type="date" 
+                  value={dwarForm.date} 
+                  onChange={(e) => setDwarForm({ ...dwarForm, date: e.target.value })}
+                  className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                {/* D - Did */}
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-emerald-400 flex items-center space-x-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>D — What You DID Today (Actual Output)</span>
+                  </label>
+                  <textarea 
+                    rows="3" 
+                    required
+                    placeholder="e.g. Completed 6 hours of lecture, solved 45 Physics numericals on Mechanics, revised NCERT Cell cycle." 
+                    value={dwarForm.did}
+                    onChange={(e) => setDwarForm({ ...dwarForm, did: e.target.value })}
+                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-slate-200 leading-relaxed outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                {/* W - Will */}
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-cyan-400 flex items-center space-x-1">
+                    <Flame className="w-3.5 h-3.5" />
+                    <span>W — What You WILL Do Tomorrow (Target Commitment)</span>
+                  </label>
+                  <textarea 
+                    rows="3" 
+                    required
+                    placeholder="e.g. Finish Thermodynamics PYQs, memorize Organic reaction mechanisms, 1 mock review." 
+                    value={dwarForm.will}
+                    onChange={(e) => setDwarForm({ ...dwarForm, will: e.target.value })}
+                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-slate-200 leading-relaxed outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                {/* A - Achievement */}
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-amber-400 flex items-center space-x-1">
+                    <Award className="w-3.5 h-3.5" />
+                    <span>A — Achievement of the Day (Positive Win)</span>
+                  </label>
+                  <textarea 
+                    rows="2" 
+                    placeholder="e.g. Achieved 90% accuracy in Physics chapter test without any negative marks." 
+                    value={dwarForm.achievement}
+                    onChange={(e) => setDwarForm({ ...dwarForm, achievement: e.target.value })}
+                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-slate-200 leading-relaxed outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {/* R - Regret */}
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-rose-400 flex items-center space-x-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>R — Regret of the Day (Time Waste / Habit Trigger)</span>
+                  </label>
+                  <textarea 
+                    rows="2" 
+                    placeholder="e.g. Procrastinated for 45 minutes on phone after lunch, skipped Biology revision." 
+                    value={dwarForm.regret}
+                    onChange={(e) => setDwarForm({ ...dwarForm, regret: e.target.value })}
+                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-slate-200 leading-relaxed outline-none focus:border-rose-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-2">
+                <div className="flex items-center space-x-3 text-xs">
+                  <span className="text-slate-400 font-bold">Daily Self-Satisfaction Rating:</span>
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="10" 
+                    step="0.5" 
+                    value={dwarForm.score} 
+                    onChange={(e) => setDwarForm({ ...dwarForm, score: e.target.value })}
+                    className="accent-amber-500 cursor-pointer"
+                  />
+                  <span className="font-mono font-bold text-amber-400 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                    {dwarForm.score} / 10
+                  </span>
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2.5 rounded-xl font-bold text-xs transition shadow-lg shadow-amber-600/20"
+                >
+                  Save D.W.A.R. Analysis
+                </button>
+              </div>
+            </form>
+
+            {/* DWAR Telemetry Graph */}
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+              <h3 className="text-sm font-bold text-slate-200">D.W.A.R. Self-Discipline Rating Trend (/10)</h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={dwarChartData}>
+                    <defs>
+                      <linearGradient id="dwarGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="date" stroke="#64748b" fontSize={10} />
+                    <YAxis domain={[0, 10]} stroke="#64748b" fontSize={10} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
+                    <Area type="monotone" dataKey="score" name="Discipline Score" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#dwarGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Historical DWAR Feed */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-200">Historical D.W.A.R. Journal Entries</h3>
+              {dwarLogs.length === 0 ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
+                  No D.W.A.R. logs submitted yet. Fill out today's self-evaluation above!
+                </div>
+              ) : (
+                dwarLogs.map(log => (
+                  <div key={log.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 hover:border-slate-700 transition">
+                    <div className="flex justify-between items-center border-b border-slate-800/60 pb-2.5">
+                      <div className="flex items-center space-x-2 font-mono text-xs font-bold text-white">
+                        <CalendarDays className="w-4 h-4 text-amber-400" />
+                        <span>{log.date}</span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-950 text-amber-400 border border-amber-800/40">
+                          Score: {log.score}/10
+                        </span>
+                        <button onClick={() => deleteDwarLog(log.id)} className="text-slate-500 hover:text-rose-400">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                        <span className="font-bold text-emerald-400 block mb-1">D — What Was Done:</span>
+                        <p className="text-slate-300 leading-relaxed">{log.did}</p>
+                      </div>
+                      <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                        <span className="font-bold text-cyan-400 block mb-1">W — Planned for Next Day:</span>
+                        <p className="text-slate-300 leading-relaxed">{log.will}</p>
+                      </div>
+                      <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                        <span className="font-bold text-amber-400 block mb-1">A — Key Achievement:</span>
+                        <p className="text-slate-300 leading-relaxed">{log.achievement || 'None recorded'}</p>
+                      </div>
+                      <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                        <span className="font-bold text-rose-400 block mb-1">R — Primary Regret / Leakage:</span>
+                        <p className="text-slate-300 leading-relaxed">{log.regret || 'None recorded'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: EXECUTION ANALYTICS */}
         {activeTab === 'analytics' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -709,7 +1025,6 @@ export default function App() {
                 <p className="text-xs text-slate-400">Track task volume and consistency percentage trends over time.</p>
               </div>
 
-              {/* Time Scope Toggle */}
               <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs">
                 {[
                   { id: '7', label: 'Past 7 Days' },
@@ -727,7 +1042,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Aggregated KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl text-center">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Tasks In Period</span>
@@ -748,9 +1062,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Graphs: Execution Rate (%) and Tasks Volume */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Daily Execution Rate Line Chart */}
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
                 <h3 className="text-sm font-bold text-slate-200">Daily Execution Rate Trend (%)</h3>
                 <div className="h-64 w-full">
@@ -772,7 +1084,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Completed vs Total Tasks Stacked Bar */}
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
                 <h3 className="text-sm font-bold text-slate-200">Task Volume (Total vs Completed)</h3>
                 <div className="h-64 w-full">
@@ -791,7 +1102,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Daily Chronological Breakdown Table */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-bold text-slate-200">Day-by-Day Historical Log</h3>
@@ -803,8 +1113,8 @@ export default function App() {
                   <thead className="bg-slate-800/60 uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-800">
                     <tr>
                       <th className="p-3">Date</th>
-                      <th className="p-3">Planned Targets</th>
-                      <th className="p-3">Completed Targets</th>
+                      <th className="p-3">Planned</th>
+                      <th className="p-3">Completed</th>
                       <th className="p-3">Score %</th>
                       <th className="p-3">Tasks Executed</th>
                     </tr>
@@ -843,7 +1153,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: TIMERS & MACRO SCHEDULE */}
+        {/* TAB 3: TIMERS & MACRO SCHEDULE */}
         {activeTab === 'daily' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -999,7 +1309,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: SPACED REPETITION (SM-2) */}
+        {/* TAB 4: SPACED REPETITION (SM-2) */}
         {activeTab === 'spaced' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1049,7 +1359,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 4: SMART DIAGNOSTIC QUESTION BANK */}
+        {/* TAB 5: SMART QUESTION BANK */}
         {activeTab === 'questions' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1066,7 +1376,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Cascading Filter Bar */}
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">1. Subject</label>
@@ -1102,7 +1411,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Question Cards */}
             <div className="space-y-4">
               {filteredQuestions.length === 0 ? (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
@@ -1214,7 +1522,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 5: MOCK TELEMETRY */}
+        {/* TAB 6: MOCK TELEMETRY */}
         {activeTab === 'mock' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
