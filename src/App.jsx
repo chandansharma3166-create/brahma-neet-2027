@@ -3,7 +3,7 @@ import {
   Clock, AlertCircle, RotateCcw, Play, Pause, 
   BarChart2, PlusCircle, RefreshCw, X, Trash2, Check,
   BrainCircuit, Calendar, TrendingUp, BookOpen, ExternalLink,
-  Home, CheckSquare, Edit3, Award, Flame, Bell, Filter, Timer
+  Home, CheckSquare, Edit3, Award, Flame, Bell, Filter, Timer, BellRing
 } from 'lucide-react';
 import { 
   ResponsiveContainer, LineChart, Line, BarChart, Bar, 
@@ -31,14 +31,14 @@ export default function App() {
   });
   const [newTaskInput, setNewTaskInput] = useState({ text: '', timeSlot: '' });
 
-  // 3. Pomodoro + Standard Block Timers
+  // 3. 50/10 Pomodoro + Standard Block Timers
   const [timerMode, setTimerMode] = useState('blocks'); // 'blocks' or 'pomodoro'
   const [pomoState, setPomoState] = useState({
     mode: 'work', // 'work' or 'break'
-    timeLeft: 25 * 60,
+    timeLeft: 50 * 60, // Default 50 minutes
     isRunning: false,
-    workDuration: 25,
-    breakDuration: 5,
+    workDuration: 50,
+    breakDuration: 10,
     completedSessions: 0
   });
 
@@ -79,7 +79,7 @@ export default function App() {
       { id: 4, name: 'Major Test 4', date: '2026-08-26', timeframe: 'Monthly', physics: 155, chemistry: 160, biology: 345, total: 660, negativeMarks: 8, rank: 85 }
     ];
   });
-  const [mockFilter, setMockFilter] = useState('All'); // 'All', 'Weekly', 'Monthly'
+  const [mockFilter, setMockFilter] = useState('All');
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -92,15 +92,15 @@ export default function App() {
   const [newQ, setNewQ] = useState({ subject: 'Physics', chapter: '', topic: '', questionText: '', errorType: 'Conceptual Error', timeSpent: 60, revCount: 0 });
   const [newMock, setNewMock] = useState({ name: '', date: todayDateStr, timeframe: 'Weekly', physics: 0, chemistry: 0, biology: 0, negativeMarks: 0, rank: 0 });
 
-  // Web Audio Synth Notification
+  // === AUDIO CHIME ENGINE ===
   const playAlertSound = () => {
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // Tone D5
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // Tone A5
       gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
       osc.connect(gain);
@@ -109,6 +109,40 @@ export default function App() {
       osc.stop(audioCtx.currentTime + 0.8);
     } catch (e) {
       console.log('Audio error:', e);
+    }
+  };
+
+  // === DEVICE ALERT ENGINE (AUDIO + VIBRATION + PUSH NOTIFICATIONS) ===
+  const triggerDeviceAlert = (title, message) => {
+    // 1. Play Sound
+    playAlertSound();
+
+    // 2. Mobile Hardware Vibration
+    if (navigator.vibrate) {
+      navigator.vibrate([500, 250, 500, 250, 500]);
+    }
+
+    // 3. Laptop / Mobile Notification
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body: message });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            new Notification(title, { body: message });
+          }
+        });
+      }
+    }
+  };
+
+  const requestNotificationPermission = () => {
+    if ('Notification' in window) {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          triggerDeviceAlert("🔔 Notifications Enabled", "Brahma NEET alert system is connected.");
+        }
+      });
     }
   };
 
@@ -138,9 +172,8 @@ export default function App() {
     fetchGoogleSheet();
   }, []);
 
-  // Update Sheet Row directly from website
+  // Update Sheet Row directly from dashboard
   const updateSheetItem = async (rowIndex, status, strength, scheduledDate) => {
-    // Optimistic UI update
     setSheetSchedule(prev => prev.map(item => item.rowIndex === rowIndex ? {
       ...item,
       Status: status !== undefined ? status : item.Status,
@@ -152,39 +185,35 @@ export default function App() {
       await fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'update',
-          rowIndex,
-          status,
-          strength,
-          scheduledDate
-        })
+        body: JSON.stringify({ action: 'update', rowIndex, status, strength, scheduledDate })
       });
     } catch (err) {
       console.error("Sheet update sync failed:", err);
     }
   };
 
-  // Timers Tick Engine
+  // === DUAL TIMER TICK ENGINE ===
   useEffect(() => {
     const timer = setInterval(() => {
-      // Focus Blocks
+      // 1. Subject Blocks Engine
       setSlots(prevSlots =>
         prevSlots.map(slot => {
           if (slot.isRunning && slot.timeLeft > 0) {
-            if (slot.timeLeft === 1) playAlertSound();
+            if (slot.timeLeft === 1) {
+              triggerDeviceAlert(`⏰ ${slot.subject} Block Complete!`, "Session completed! Record your mistakes in the Question Bank.");
+            }
             return { ...slot, timeLeft: slot.timeLeft - 1 };
           }
           return slot;
         })
       );
 
-      // Pomodoro Engine
+      // 2. 50/10 Pomodoro Engine
       setPomoState(prev => {
         if (!prev.isRunning || prev.timeLeft <= 0) return prev;
         if (prev.timeLeft === 1) {
-          playAlertSound();
           if (prev.mode === 'work') {
+            triggerDeviceAlert("🔥 50-Min Session Complete!", "Great focus! Take a 10-minute restorative break.");
             return {
               ...prev,
               mode: 'break',
@@ -192,6 +221,7 @@ export default function App() {
               completedSessions: prev.completedSessions + 1
             };
           } else {
+            triggerDeviceAlert("☕ 10-Min Break Over!", "Ready to start your next 50-minute study block?");
             return {
               ...prev,
               mode: 'work',
@@ -234,11 +264,10 @@ export default function App() {
     setDailyTasks(dailyTasks.filter(t => t.id !== id));
   };
 
-  // Completion calculation
   const completedCount = dailyTasks.filter(t => t.completed).length;
   const progressPercent = dailyTasks.length > 0 ? Math.round((completedCount / dailyTasks.length) * 100) : 0;
 
-  // Spaced Repetition Due Today
+  // SM-2 Spaced Repetition Helpers
   const dueRevisionsToday = revisionDeck.filter(item => item.nextDue <= todayDateStr);
 
   const deleteRevisionTopic = (id) => {
@@ -300,7 +329,7 @@ export default function App() {
     setSelectedTopicForReview(null);
   };
 
-  // Question Bank Helpers
+  // Question Error Bank Helpers
   const handleAddQuestion = (e) => {
     e.preventDefault();
     if (!newQ.chapter.trim()) return;
@@ -363,17 +392,28 @@ export default function App() {
           </div>
         </div>
 
-        <button 
-          onClick={fetchGoogleSheet}
-          disabled={isSyncing}
-          className="flex items-center space-x-2 bg-slate-800/80 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 text-xs text-emerald-400 font-medium transition"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-          <span>{isSyncing ? 'Syncing...' : 'Sync Brahma Sheet'}</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button 
+            onClick={requestNotificationPermission}
+            title="Enable Push Notifications"
+            className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 text-xs text-amber-400 font-medium transition"
+          >
+            <BellRing className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Enable Alerts</span>
+          </button>
+          
+          <button 
+            onClick={fetchGoogleSheet}
+            disabled={isSyncing}
+            className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 text-xs text-emerald-400 font-medium transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync Sheet'}</span>
+          </button>
+        </div>
       </header>
 
-      {/* Tabs */}
+      {/* Navigation Tabs */}
       <nav className="flex space-x-1 p-2 bg-slate-900 border-b border-slate-800 text-sm overflow-x-auto">
         {[
           { id: 'home', label: 'Daily Command (Home)', icon: Home },
@@ -400,7 +440,7 @@ export default function App() {
         })}
       </nav>
 
-      {/* Main Body */}
+      {/* Main Content Area */}
       <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto space-y-6">
         
         {/* TAB 0: HOME PAGE DASHBOARD */}
@@ -524,7 +564,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 1: TIMERS (BLOCKS + POMODORO) & GOOGLE SHEET MACRO SCHEDULE */}
+        {/* TAB 1: TIMERS (BLOCKS + 50/10 POMODORO) & GOOGLE SHEET MACRO SCHEDULE */}
         {activeTab === 'daily' && (
           <div className="space-y-6">
             {/* Mode Switcher */}
@@ -540,7 +580,7 @@ export default function App() {
                   onClick={() => setTimerMode('pomodoro')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${timerMode === 'pomodoro' ? 'bg-amber-600 text-white' : 'text-slate-400'}`}
                 >
-                  Pomodoro Engine
+                  50/10 Pomodoro Engine
                 </button>
               </div>
             </div>
@@ -577,24 +617,24 @@ export default function App() {
               </div>
             )}
 
-            {/* Pomodoro Timer */}
+            {/* 50/10 Pomodoro Timer Card */}
             {timerMode === 'pomodoro' && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-lg mx-auto text-center space-y-4">
                 <div className="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-950 text-amber-400 border border-amber-800/40">
-                  {pomoState.mode === 'work' ? '🔥 Focus Session' : '☕ Rest Break'}
+                  {pomoState.mode === 'work' ? '🔥 50-Min Deep Study Window' : '☕ 10-Min Recovery Break'}
                 </div>
                 <h2 className="text-6xl font-black font-mono text-white tracking-tight">{formatTime(pomoState.timeLeft)}</h2>
-                <p className="text-xs text-slate-400">Sessions Completed Today: <span className="text-amber-400 font-bold font-mono">{pomoState.completedSessions}</span></p>
+                <p className="text-xs text-slate-400">Sessions Cleared Today: <span className="text-amber-400 font-bold font-mono">{pomoState.completedSessions}</span></p>
 
-                <div className="flex justify-center space-x-3 pt-4">
+                <div className="flex justify-center space-x-3 pt-2">
                   <button 
                     onClick={() => setPomoState({ ...pomoState, isRunning: !pomoState.isRunning })}
                     className={`px-6 py-3 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
-                      pomoState.isRunning ? 'bg-amber-500 text-slate-950' : 'bg-amber-600 hover:bg-amber-500 text-white'
+                      pomoState.isRunning ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-amber-600 hover:bg-amber-500 text-white'
                     }`}
                   >
                     {pomoState.isRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                    <span>{pomoState.isRunning ? 'Pause Session' : 'Start Pomodoro'}</span>
+                    <span>{pomoState.isRunning ? 'Pause Pomodoro' : 'Start 50-Min Focus'}</span>
                   </button>
                   <button 
                     onClick={() => setPomoState({ ...pomoState, timeLeft: (pomoState.mode === 'work' ? pomoState.workDuration : pomoState.breakDuration) * 60, isRunning: false })}
@@ -603,10 +643,17 @@ export default function App() {
                     <RotateCcw className="w-4 h-4" />
                   </button>
                 </div>
+
+                <button
+                  onClick={requestNotificationPermission}
+                  className="text-[11px] text-amber-400/80 hover:text-amber-300 underline font-medium block mx-auto pt-2"
+                >
+                  🔔 Enable Laptop & Mobile System Alarm Notifications
+                </button>
               </div>
             )}
 
-            {/* TWO-WAY GOOGLE SHEET MACRO SCHEDULE */}
+            {/* Interactive Google Sheet Macro Schedule */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
               <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-2">
@@ -640,7 +687,6 @@ export default function App() {
                           <td className="p-3">{row.Chapter}</td>
                           <td className="p-3 font-mono">{row.TargetHours}h</td>
                           
-                          {/* Date slot selector directly synced */}
                           <td className="p-3">
                             <input 
                               type="date" 
@@ -650,7 +696,6 @@ export default function App() {
                             />
                           </td>
 
-                          {/* Strength Selector */}
                           <td className="p-3">
                             <select
                               value={row.Strength || 'Moderate'}
@@ -663,7 +708,6 @@ export default function App() {
                             </select>
                           </td>
 
-                          {/* Status Selector */}
                           <td className="p-3">
                             <select
                               value={row.Status || 'Pending'}
@@ -700,7 +744,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Reminder Alert Banner */}
             {dueRevisionsToday.length > 0 && (
               <div className="bg-amber-950/40 border border-amber-800/60 p-4 rounded-2xl flex items-center space-x-3 text-xs text-amber-200">
                 <Bell className="w-5 h-5 text-amber-400 shrink-0" />
@@ -813,7 +856,6 @@ export default function App() {
                 <p className="text-xs text-slate-400">Filtered progression analytics</p>
               </div>
               <div className="flex items-center space-x-3">
-                {/* Filter Selector */}
                 <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs">
                   {['All', 'Weekly', 'Monthly'].map(f => (
                     <button
@@ -832,7 +874,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Overall Score + Rank Progression Dual Graphs */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Score Growth */}
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
@@ -888,7 +929,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Table with Delete option */}
             <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-800/60 uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-800">
