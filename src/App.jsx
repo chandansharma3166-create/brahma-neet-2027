@@ -4,11 +4,12 @@ import {
   BarChart2, PlusCircle, RefreshCw, X, Trash2, Check,
   BrainCircuit, Calendar, TrendingUp, BookOpen, ExternalLink,
   Home, CheckSquare, Edit3, Award, Flame, Bell, Filter, Timer, 
-  BellRing, ChevronRight, ChevronDown, History, Zap, Image, Eye
+  BellRing, ChevronRight, ChevronDown, History, Zap, Image, Eye,
+  Activity, CheckCircle2, CalendarDays
 } from 'lucide-react';
 import { 
   ResponsiveContainer, LineChart, Line, BarChart, Bar, 
-  XAxis, YAxis, Tooltip, CartesianGrid, Legend 
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend, AreaChart, Area 
 } from 'recharts';
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRjm0L9b_-804uxLitV3kCw3aBeSuqqFhzm8xgPpqd81yiDs75CejBs1OTI1NCcE2F/exec";
@@ -21,17 +22,20 @@ export default function App() {
   const [sheetSchedule, setSheetSchedule] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 2. Daily Task History & Date Filtering
+  // 2. Daily Tasks & Date Filtering
   const [selectedTaskDate, setSelectedTaskDate] = useState(todayDateStr);
   const [dailyTasks, setDailyTasks] = useState(() => {
     const saved = localStorage.getItem('brahma_daily_tasks');
     return saved ? JSON.parse(saved) : [
-      { id: 1, date: todayDateStr, text: 'Solve 45 Physics Numericals (Kinematics)', completed: false, timeSlot: '09:00 - 11:30' },
-      { id: 2, date: todayDateStr, text: 'NCERT Organic Chemistry Line-by-Line Reading', completed: false, timeSlot: '12:00 - 14:00' },
+      { id: 1, date: todayDateStr, text: 'Solve 45 Physics Numericals (Kinematics)', completed: true, timeSlot: '09:00 - 11:30' },
+      { id: 2, date: todayDateStr, text: 'NCERT Organic Chemistry Line-by-Line Reading', completed: true, timeSlot: '12:00 - 14:00' },
       { id: 3, date: todayDateStr, text: 'Cell Biology Diagram Practice & Flashcards', completed: false, timeSlot: '15:00 - 16:30' }
     ];
   });
   const [newTaskInput, setNewTaskInput] = useState({ text: '', timeSlot: '' });
+
+  // Execution Analytics Filter Scope
+  const [analyticsScope, setAnalyticsScope] = useState('7'); // '7', '30', 'all'
 
   // 3. 50/10 Pomodoro + Standard Block Timers
   const [timerMode, setTimerMode] = useState('blocks');
@@ -61,7 +65,7 @@ export default function App() {
     ];
   });
 
-  // 5. Hierarchical Question Bank with Image Support & Attempt History
+  // 5. Hierarchical Question Bank with Image & Attempts
   const [questions, setQuestions] = useState(() => {
     const saved = localStorage.getItem('brahma_questions_v3');
     return saved ? JSON.parse(saved) : [
@@ -128,7 +132,7 @@ export default function App() {
     initialTime: 60 
   });
 
-  // Mock Test Telemetry
+  // Mock Tests
   const [mockTests, setMockTests] = useState(() => {
     const saved = localStorage.getItem('brahma_mock_telemetry');
     return saved ? JSON.parse(saved) : [
@@ -285,7 +289,42 @@ export default function App() {
     setDailyTasks(dailyTasks.filter(t => t.id !== id));
   };
 
-  // SM-2 Spaced Repetition Handlers
+  // === DEDICATED EXECUTION ANALYTICS ENGINE ===
+  const generateExecutionAnalytics = () => {
+    // Group all tasks by date
+    const dateMap = {};
+    dailyTasks.forEach(task => {
+      const d = task.date || todayDateStr;
+      if (!dateMap[d]) {
+        dateMap[d] = { date: d, total: 0, completed: 0, tasks: [] };
+      }
+      dateMap[d].total += 1;
+      if (task.completed) dateMap[d].completed += 1;
+      dateMap[d].tasks.push(task);
+    });
+
+    let datesArray = Object.values(dateMap).map(item => ({
+      ...item,
+      rate: item.total > 0 ? Math.round((item.completed / item.total) * 100) : 0
+    })).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Filter by Scope
+    if (analyticsScope === '7') {
+      datesArray = datesArray.slice(-7);
+    } else if (analyticsScope === '30') {
+      datesArray = datesArray.slice(-30);
+    }
+
+    const totalTasksInRange = datesArray.reduce((acc, curr) => acc + curr.total, 0);
+    const completedTasksInRange = datesArray.reduce((acc, curr) => acc + curr.completed, 0);
+    const avgCompletionRate = totalTasksInRange > 0 ? Math.round((completedTasksInRange / totalTasksInRange) * 100) : 0;
+
+    return { datesArray, totalTasksInRange, completedTasksInRange, avgCompletionRate };
+  };
+
+  const executionAnalytics = generateExecutionAnalytics();
+
+  // SM-2 Helpers
   const dueRevisionsToday = revisionDeck.filter(item => item.nextDue <= todayDateStr);
 
   const deleteRevisionTopic = (id) => {
@@ -362,7 +401,6 @@ export default function App() {
     return true;
   });
 
-  // Image Upload Handler (Base64)
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -415,7 +453,7 @@ export default function App() {
     setQuestions(questions.filter(q => q.id !== id));
   };
 
-  // Mock Test Helpers
+  // Mock Helpers
   const handleAddMock = (e) => {
     e.preventDefault();
     if (!newMock.name.trim()) return;
@@ -485,6 +523,7 @@ export default function App() {
       <nav className="flex space-x-1 p-2 bg-slate-900 border-b border-slate-800 text-sm overflow-x-auto">
         {[
           { id: 'home', label: 'Daily Command (Home)', icon: Home },
+          { id: 'analytics', label: 'Execution Analytics & History', icon: Activity },
           { id: 'daily', label: 'Timers & Macro Schedule', icon: Clock },
           { id: 'spaced', label: 'Adaptive Revision (SM-2)', icon: RotateCcw },
           { id: 'questions', label: 'Diagnostic Question Bank', icon: AlertCircle },
@@ -508,7 +547,7 @@ export default function App() {
         })}
       </nav>
 
-      {/* Main Area */}
+      {/* Main Content Area */}
       <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto space-y-6">
         
         {/* TAB 0: HOME PAGE */}
@@ -658,7 +697,153 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 1: TIMERS & MACRO SCHEDULE */}
+        {/* TAB 1: DEDICATED EXECUTION ANALYTICS & LONG-TERM HISTORY */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-lg font-bold flex items-center space-x-2">
+                  <Activity className="w-5 h-5 text-amber-400" />
+                  <span>Execution Analytics & Daily Log Progression</span>
+                </h2>
+                <p className="text-xs text-slate-400">Track task volume and consistency percentage trends over time.</p>
+              </div>
+
+              {/* Time Scope Toggle */}
+              <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs">
+                {[
+                  { id: '7', label: 'Past 7 Days' },
+                  { id: '30', label: 'Past 30 Days' },
+                  { id: 'all', label: 'All Recorded Time' }
+                ].map(scope => (
+                  <button
+                    key={scope.id}
+                    onClick={() => setAnalyticsScope(scope.id)}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition ${analyticsScope === scope.id ? 'bg-amber-600 text-white' : 'text-slate-400'}`}
+                  >
+                    {scope.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Aggregated KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl text-center">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Tasks In Period</span>
+                <h3 className="text-3xl font-extrabold font-mono text-white mt-2">{executionAnalytics.totalTasksInRange}</h3>
+                <p className="text-[11px] text-slate-500 mt-1">Total targets set</p>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl text-center">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Completed Cleared</span>
+                <h3 className="text-3xl font-extrabold font-mono text-emerald-400 mt-2">{executionAnalytics.completedTasksInRange}</h3>
+                <p className="text-[11px] text-slate-500 mt-1">Tasks executed</p>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl text-center">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Average Execution Rate</span>
+                <h3 className="text-3xl font-extrabold font-mono text-amber-400 mt-2">{executionAnalytics.avgCompletionRate}%</h3>
+                <p className="text-[11px] text-slate-500 mt-1">Productivity efficiency</p>
+              </div>
+            </div>
+
+            {/* Graphs: Execution Rate (%) and Tasks Volume */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Daily Execution Rate Line Chart */}
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+                <h3 className="text-sm font-bold text-slate-200">Daily Execution Rate Trend (%)</h3>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={executionAnalytics.datesArray}>
+                      <defs>
+                        <linearGradient id="rateGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="date" stroke="#64748b" fontSize={10} />
+                      <YAxis domain={[0, 100]} stroke="#64748b" fontSize={10} unit="%" />
+                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
+                      <Area type="monotone" dataKey="rate" name="Execution %" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#rateGradient)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Completed vs Total Tasks Stacked Bar */}
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+                <h3 className="text-sm font-bold text-slate-200">Task Volume (Total vs Completed)</h3>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={executionAnalytics.datesArray}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="date" stroke="#64748b" fontSize={10} />
+                      <YAxis stroke="#64748b" fontSize={10} />
+                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
+                      <Legend />
+                      <Bar dataKey="total" name="Total Planned" fill="#475569" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="completed" name="Completed" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Daily Chronological Breakdown Table */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-bold text-slate-200">Day-by-Day Historical Log</h3>
+                <span className="text-xs text-slate-400">{executionAnalytics.datesArray.length} recorded active days</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-800/60 uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Planned Targets</th>
+                      <th className="p-3">Completed Targets</th>
+                      <th className="p-3">Score %</th>
+                      <th className="p-3">Tasks Executed</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {executionAnalytics.datesArray.length === 0 ? (
+                      <tr><td colSpan="5" className="p-4 text-center text-slate-500">No execution logs found in this timeframe.</td></tr>
+                    ) : (
+                      executionAnalytics.datesArray.slice().reverse().map(item => (
+                        <tr key={item.date} className="hover:bg-slate-800/30 transition">
+                          <td className="p-3 font-mono font-bold text-white flex items-center space-x-2">
+                            <CalendarDays className="w-3.5 h-3.5 text-amber-400" />
+                            <span>{item.date}</span>
+                          </td>
+                          <td className="p-3 font-mono">{item.total} tasks</td>
+                          <td className="p-3 font-mono text-emerald-400 font-bold">{item.completed} cleared</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded-full font-mono font-bold text-[10px] ${
+                              item.rate >= 80 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50' :
+                              item.rate >= 50 ? 'bg-amber-950 text-amber-400 border border-amber-800/50' :
+                              'bg-rose-950 text-rose-400 border border-rose-800/50'
+                            }`}>
+                              {item.rate}%
+                            </span>
+                          </td>
+                          <td className="p-3 max-w-sm truncate text-slate-400">
+                            {item.tasks.map(t => t.text).join(' • ')}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: TIMERS & MACRO SCHEDULE */}
         {activeTab === 'daily' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -814,7 +999,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: SPACED REPETITION (SM-2) */}
+        {/* TAB 3: SPACED REPETITION (SM-2) */}
         {activeTab === 'spaced' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -864,7 +1049,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: SMART HIERARCHICAL QUESTION BANK & DIAGRAM SUPPORT */}
+        {/* TAB 4: SMART DIAGNOSTIC QUESTION BANK */}
         {activeTab === 'questions' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -926,7 +1111,6 @@ export default function App() {
               ) : (
                 filteredQuestions.map(q => (
                   <div key={q.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition space-y-4">
-                    {/* Header Breadcrumb */}
                     <div className="flex flex-wrap justify-between items-center gap-2">
                       <div className="flex items-center space-x-2 text-xs">
                         <span className="font-bold text-amber-400">{q.subject}</span>
@@ -937,7 +1121,6 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        {/* Difficulty Mastery */}
                         <select
                           value={q.difficulty || 'Moderate'}
                           onChange={(e) => updateQuestionMastery(q.id, e.target.value)}
@@ -948,7 +1131,6 @@ export default function App() {
                           <option value="Hard">🔴 Hard</option>
                         </select>
 
-                        {/* Error Tag */}
                         <select
                           value={q.errorType}
                           onChange={(e) => updateQuestionErrorType(q.id, e.target.value)}
@@ -968,7 +1150,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Question Text & Diagram Image */}
                     <div className="space-y-3">
                       {q.questionText && (
                         <div className="text-xs text-slate-200 bg-slate-950/60 p-3 rounded-xl border border-slate-800 leading-relaxed font-mono">
@@ -976,7 +1157,6 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* Question Diagram Thumbnail */}
                       {q.image && (
                         <div className="flex items-center space-x-3 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800 w-fit">
                           <img 
@@ -999,7 +1179,6 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Attempt Speed Timeline */}
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/60">
                       <div className="flex items-center space-x-2">
                         <History className="w-4 h-4 text-cyan-400" />
@@ -1035,7 +1214,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 4: MOCK TELEMETRY */}
+        {/* TAB 5: MOCK TELEMETRY */}
         {activeTab === 'mock' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1238,7 +1417,6 @@ export default function App() {
                 <textarea rows="2" placeholder="Describe the critical point where the mistake happened..." value={newQ.questionText} onChange={(e) => setNewQ({ ...newQ, questionText: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
               </div>
 
-              {/* IMAGE UPLOAD FIELD */}
               <div>
                 <label className="block text-slate-400 mb-1 font-semibold flex items-center space-x-1.5">
                   <Image className="w-3.5 h-3.5 text-amber-400" />
