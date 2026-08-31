@@ -3,7 +3,8 @@ import {
   Clock, AlertCircle, RotateCcw, Play, Pause, 
   BarChart2, PlusCircle, RefreshCw, X, Trash2, Check,
   BrainCircuit, Calendar, TrendingUp, BookOpen, ExternalLink,
-  Home, CheckSquare, Edit3, Award, Flame, Bell, Filter, Timer, BellRing
+  Home, CheckSquare, Edit3, Award, Flame, Bell, Filter, Timer, 
+  BellRing, ChevronRight, ChevronDown, History, Zap, CheckCircle2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, LineChart, Line, BarChart, Bar, 
@@ -20,7 +21,8 @@ export default function App() {
   const [sheetSchedule, setSheetSchedule] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 2. Daily Custom Checklist & Productivity Record
+  // 2. Daily Task History & Date Filtering
+  const [selectedTaskDate, setSelectedTaskDate] = useState(todayDateStr);
   const [dailyTasks, setDailyTasks] = useState(() => {
     const saved = localStorage.getItem('brahma_daily_tasks');
     return saved ? JSON.parse(saved) : [
@@ -32,10 +34,10 @@ export default function App() {
   const [newTaskInput, setNewTaskInput] = useState({ text: '', timeSlot: '' });
 
   // 3. 50/10 Pomodoro + Standard Block Timers
-  const [timerMode, setTimerMode] = useState('blocks'); // 'blocks' or 'pomodoro'
+  const [timerMode, setTimerMode] = useState('blocks');
   const [pomoState, setPomoState] = useState({
-    mode: 'work', // 'work' or 'break'
-    timeLeft: 50 * 60, // Default 50 minutes
+    mode: 'work',
+    timeLeft: 50 * 60,
     isRunning: false,
     workDuration: 50,
     breakDuration: 10,
@@ -59,15 +61,51 @@ export default function App() {
     ];
   });
 
-  // 5. Hierarchical Question Error Bank
+  // 5. Hierarchical Question Bank with Attempt History & Speed Tracking
   const [questions, setQuestions] = useState(() => {
-    const saved = localStorage.getItem('brahma_questions');
+    const saved = localStorage.getItem('brahma_questions_v2');
     return saved ? JSON.parse(saved) : [
-      { id: 1, subject: 'Physics', chapter: 'Rotational Motion', topic: 'Moment of Inertia', questionText: 'Hollow cylinder vs Solid cylinder rolling acceleration ratio', errorType: 'Calculation Mistake', timeSpent: 110, revCount: 1 },
-      { id: 2, subject: 'Chemistry', chapter: 'Thermodynamics', topic: 'Entropy & Gibbs Free Energy', questionText: 'Spontaneity criteria at low vs high temperature', errorType: 'Conceptual Error', timeSpent: 75, revCount: 2 },
-      { id: 3, subject: 'Biology', chapter: 'Molecular Basis of Inheritance', topic: 'Lac Operon', questionText: 'Role of allolactose vs IPTG in inducer binding', errorType: 'Misread Question', timeSpent: 35, revCount: 3 }
+      { 
+        id: 1, 
+        subject: 'Physics', 
+        chapter: 'Rotational Motion', 
+        topic: 'Moment of Inertia', 
+        questionText: 'Hollow cylinder vs Solid cylinder rolling acceleration ratio down an incline.',
+        errorType: 'Calculation Error',
+        difficulty: 'Hard',
+        attempts: [110, 65, 30] // [Attempt 1 (110s), Attempt 2 (65s), Attempt 3 (30s)]
+      },
+      { 
+        id: 2, 
+        subject: 'Chemistry', 
+        chapter: 'Thermodynamics', 
+        topic: 'Entropy & Gibbs Energy', 
+        questionText: 'Spontaneity criteria when delta H is positive and delta S is positive.',
+        errorType: 'Conceptual Error',
+        difficulty: 'Moderate',
+        attempts: [85, 40]
+      },
+      { 
+        id: 3, 
+        subject: 'Biology', 
+        chapter: 'Molecular Basis of Inheritance', 
+        topic: 'Lac Operon', 
+        questionText: 'Inducer binding site on repressor protein vs operator gene.',
+        errorType: 'Misread Question',
+        difficulty: 'Easy',
+        attempts: [45, 18, 12]
+      }
     ];
   });
+
+  // Question Filter Controls
+  const [filterSubject, setFilterSubject] = useState('All');
+  const [filterChapter, setFilterChapter] = useState('All');
+  const [filterTopic, setFilterTopic] = useState('All');
+
+  // Attempt Log Modal
+  const [attemptModalData, setAttemptModalData] = useState(null);
+  const [newAttemptSeconds, setNewAttemptSeconds] = useState('');
 
   // 6. Mock Test Telemetry
   const [mockTests, setMockTests] = useState(() => {
@@ -89,18 +127,26 @@ export default function App() {
 
   // Forms
   const [newTopic, setNewTopic] = useState({ subject: 'Physics', topic: '', nextDue: todayDateStr });
-  const [newQ, setNewQ] = useState({ subject: 'Physics', chapter: '', topic: '', questionText: '', errorType: 'Conceptual Error', timeSpent: 60, revCount: 0 });
+  const [newQ, setNewQ] = useState({ 
+    subject: 'Physics', 
+    chapter: '', 
+    topic: '', 
+    questionText: '', 
+    errorType: 'Conceptual Error', 
+    difficulty: 'Moderate',
+    initialTime: 60 
+  });
   const [newMock, setNewMock] = useState({ name: '', date: todayDateStr, timeframe: 'Weekly', physics: 0, chemistry: 0, biology: 0, negativeMarks: 0, rank: 0 });
 
-  // === AUDIO CHIME ENGINE ===
+  // Web Audio Synth Notification
   const playAlertSound = () => {
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // Tone D5
-      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // Tone A5
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
       gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
       osc.connect(gain);
@@ -112,44 +158,27 @@ export default function App() {
     }
   };
 
-  // === DEVICE ALERT ENGINE (AUDIO + VIBRATION + PUSH NOTIFICATIONS) ===
+  // Device Notifications
   const triggerDeviceAlert = (title, message) => {
-    // 1. Play Sound
     playAlertSound();
-
-    // 2. Mobile Hardware Vibration
-    if (navigator.vibrate) {
-      navigator.vibrate([500, 250, 500, 250, 500]);
-    }
-
-    // 3. Laptop / Mobile Notification
-    if ('Notification' in window) {
-      if (Notification.permission === 'granted') {
-        new Notification(title, { body: message });
-      } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-            new Notification(title, { body: message });
-          }
-        });
-      }
+    if (navigator.vibrate) navigator.vibrate([500, 250, 500, 250, 500]);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body: message });
     }
   };
 
   const requestNotificationPermission = () => {
     if ('Notification' in window) {
       Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-          triggerDeviceAlert("🔔 Notifications Enabled", "Brahma NEET alert system is connected.");
-        }
+        if (permission === 'granted') triggerDeviceAlert("🔔 Alerts Enabled", "Brahma NEET notification engine is active.");
       });
     }
   };
 
-  // Sync with LocalStorage
+  // LocalStorage Sync
   useEffect(() => { localStorage.setItem('brahma_daily_tasks', JSON.stringify(dailyTasks)); }, [dailyTasks]);
   useEffect(() => { localStorage.setItem('brahma_sm2_deck', JSON.stringify(revisionDeck)); }, [revisionDeck]);
-  useEffect(() => { localStorage.setItem('brahma_questions', JSON.stringify(questions)); }, [questions]);
+  useEffect(() => { localStorage.setItem('brahma_questions_v2', JSON.stringify(questions)); }, [questions]);
   useEffect(() => { localStorage.setItem('brahma_mock_telemetry', JSON.stringify(mockTests)); }, [mockTests]);
 
   // Google Sheets Fetch
@@ -172,7 +201,7 @@ export default function App() {
     fetchGoogleSheet();
   }, []);
 
-  // Update Sheet Row directly from dashboard
+  // Update Sheet 2-Way
   const updateSheetItem = async (rowIndex, status, strength, scheduledDate) => {
     setSheetSchedule(prev => prev.map(item => item.rowIndex === rowIndex ? {
       ...item,
@@ -192,41 +221,28 @@ export default function App() {
     }
   };
 
-  // === DUAL TIMER TICK ENGINE ===
+  // Timers Tick
   useEffect(() => {
     const timer = setInterval(() => {
-      // 1. Subject Blocks Engine
       setSlots(prevSlots =>
         prevSlots.map(slot => {
           if (slot.isRunning && slot.timeLeft > 0) {
-            if (slot.timeLeft === 1) {
-              triggerDeviceAlert(`⏰ ${slot.subject} Block Complete!`, "Session completed! Record your mistakes in the Question Bank.");
-            }
+            if (slot.timeLeft === 1) triggerDeviceAlert(`⏰ ${slot.subject} Complete!`, "Session completed! Record errors in question bank.");
             return { ...slot, timeLeft: slot.timeLeft - 1 };
           }
           return slot;
         })
       );
 
-      // 2. 50/10 Pomodoro Engine
       setPomoState(prev => {
         if (!prev.isRunning || prev.timeLeft <= 0) return prev;
         if (prev.timeLeft === 1) {
           if (prev.mode === 'work') {
-            triggerDeviceAlert("🔥 50-Min Session Complete!", "Great focus! Take a 10-minute restorative break.");
-            return {
-              ...prev,
-              mode: 'break',
-              timeLeft: prev.breakDuration * 60,
-              completedSessions: prev.completedSessions + 1
-            };
+            triggerDeviceAlert("🔥 50-Min Session Complete!", "Great focus! Take a 10-minute break.");
+            return { ...prev, mode: 'break', timeLeft: prev.breakDuration * 60, completedSessions: prev.completedSessions + 1 };
           } else {
             triggerDeviceAlert("☕ 10-Min Break Over!", "Ready to start your next 50-minute study block?");
-            return {
-              ...prev,
-              mode: 'work',
-              timeLeft: prev.workDuration * 60
-            };
+            return { ...prev, mode: 'work', timeLeft: prev.workDuration * 60 };
           }
         }
         return { ...prev, timeLeft: prev.timeLeft - 1 };
@@ -242,7 +258,11 @@ export default function App() {
     return `${hrs > 0 ? `${hrs}h ` : ''}${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
   };
 
-  // Checklist Helpers
+  // Task Helpers (Filtered by Selected History Date)
+  const displayedTasks = dailyTasks.filter(t => t.date === selectedTaskDate);
+  const completedTodayCount = displayedTasks.filter(t => t.completed).length;
+  const progressPercent = displayedTasks.length > 0 ? Math.round((completedTodayCount / displayedTasks.length) * 100) : 0;
+
   const toggleTask = (id) => {
     setDailyTasks(dailyTasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
   };
@@ -252,7 +272,7 @@ export default function App() {
     if (!newTaskInput.text.trim()) return;
     setDailyTasks([...dailyTasks, {
       id: Date.now(),
-      date: todayDateStr,
+      date: selectedTaskDate,
       text: newTaskInput.text,
       timeSlot: newTaskInput.timeSlot || 'Flexible',
       completed: false
@@ -264,10 +284,7 @@ export default function App() {
     setDailyTasks(dailyTasks.filter(t => t.id !== id));
   };
 
-  const completedCount = dailyTasks.filter(t => t.completed).length;
-  const progressPercent = dailyTasks.length > 0 ? Math.round((completedCount / dailyTasks.length) * 100) : 0;
-
-  // SM-2 Spaced Repetition Helpers
+  // SM-2 Helpers
   const dueRevisionsToday = revisionDeck.filter(item => item.nextDue <= todayDateStr);
 
   const deleteRevisionTopic = (id) => {
@@ -329,17 +346,55 @@ export default function App() {
     setSelectedTopicForReview(null);
   };
 
-  // Question Error Bank Helpers
+  // Question Bank Cascading & Filtering
+  const subjectsList = ['All', ...new Set(questions.map(q => q.subject))];
+  const chaptersList = ['All', ...new Set(questions.filter(q => filterSubject === 'All' || q.subject === filterSubject).map(q => q.chapter))];
+  const topicsList = ['All', ...new Set(questions.filter(q => 
+    (filterSubject === 'All' || q.subject === filterSubject) &&
+    (filterChapter === 'All' || q.chapter === filterChapter)
+  ).map(q => q.topic))];
+
+  const filteredQuestions = questions.filter(q => {
+    if (filterSubject !== 'All' && q.subject !== filterSubject) return false;
+    if (filterChapter !== 'All' && q.chapter !== filterChapter) return false;
+    if (filterTopic !== 'All' && q.topic !== filterTopic) return false;
+    return true;
+  });
+
   const handleAddQuestion = (e) => {
     e.preventDefault();
     if (!newQ.chapter.trim()) return;
-    setQuestions([{ id: Date.now(), ...newQ }, ...questions]);
-    setNewQ({ subject: 'Physics', chapter: '', topic: '', questionText: '', errorType: 'Conceptual Error', timeSpent: 60, revCount: 0 });
+    setQuestions([{
+      id: Date.now(),
+      subject: newQ.subject,
+      chapter: newQ.chapter,
+      topic: newQ.topic || 'General Problem',
+      questionText: newQ.questionText,
+      errorType: newQ.errorType,
+      difficulty: newQ.difficulty,
+      attempts: [Number(newQ.initialTime) || 60]
+    }, ...questions]);
+    setNewQ({ subject: 'Physics', chapter: '', topic: '', questionText: '', errorType: 'Conceptual Error', difficulty: 'Moderate', initialTime: 60 });
     setIsModalOpen(false);
   };
 
-  const incrementQuestionRevision = (id) => {
-    setQuestions(questions.map(q => q.id === id ? { ...q, revCount: (q.revCount || 0) + 1 } : q));
+  const updateQuestionMastery = (id, newDifficulty) => {
+    setQuestions(questions.map(q => q.id === id ? { ...q, difficulty: newDifficulty } : q));
+  };
+
+  const updateQuestionErrorType = (id, newErrorType) => {
+    setQuestions(questions.map(q => q.id === id ? { ...q, errorType: newErrorType } : q));
+  };
+
+  const logNewAttempt = (e) => {
+    e.preventDefault();
+    if (!attemptModalData || !newAttemptSeconds) return;
+    setQuestions(questions.map(q => q.id === attemptModalData.id ? {
+      ...q,
+      attempts: [...q.attempts, Number(newAttemptSeconds)]
+    } : q));
+    setNewAttemptSeconds('');
+    setAttemptModalData(null);
   };
 
   const deleteQuestion = (id) => {
@@ -388,14 +443,13 @@ export default function App() {
             <h1 className="text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
               Brahma NEET 2027 Command Center
             </h1>
-            <p className="text-xs text-slate-400">Integrated Daily Dashboard & Telemetry</p>
+            <p className="text-xs text-slate-400">Target: 700+ | High-Yield Cognitive System</p>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
           <button 
             onClick={requestNotificationPermission}
-            title="Enable Push Notifications"
             className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 text-xs text-amber-400 font-medium transition"
           >
             <BellRing className="w-3.5 h-3.5" />
@@ -413,7 +467,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
+      {/* Tabs */}
       <nav className="flex space-x-1 p-2 bg-slate-900 border-b border-slate-800 text-sm overflow-x-auto">
         {[
           { id: 'home', label: 'Daily Command (Home)', icon: Home },
@@ -440,20 +494,23 @@ export default function App() {
         })}
       </nav>
 
-      {/* Main Content Area */}
+      {/* Main Container */}
       <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto space-y-6">
         
-        {/* TAB 0: HOME PAGE DASHBOARD */}
+        {/* TAB 0: HOME PAGE & DATE-FILTERED TASK HISTORY */}
         {activeTab === 'home' && (
           <div className="space-y-6">
-            {/* Daily Execution Summary Banner */}
+            {/* Top Metrics Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
                 <div>
-                  <span className="text-xs uppercase font-bold text-slate-400">Daily Execution Score</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs uppercase font-bold text-slate-400">Execution Score</span>
+                    <span className="text-xs text-amber-400 font-mono font-bold">{selectedTaskDate}</span>
+                  </div>
                   <div className="flex items-baseline space-x-2 mt-2">
                     <span className="text-4xl font-extrabold font-mono text-amber-400">{progressPercent}%</span>
-                    <span className="text-xs text-slate-400">({completedCount}/{dailyTasks.length} tasks)</span>
+                    <span className="text-xs text-slate-400">({completedTodayCount}/{displayedTasks.length} tasks)</span>
                   </div>
                 </div>
                 <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden mt-4">
@@ -466,7 +523,7 @@ export default function App() {
                   <div className="flex justify-between items-center">
                     <span className="text-xs uppercase font-bold text-slate-400">Due Revisions (Today)</span>
                     <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-950 text-rose-400 border border-rose-800/40">
-                      {dueRevisionsToday.length} Pending
+                      {dueRevisionsToday.length} Due
                     </span>
                   </div>
                   <div className="mt-3 space-y-1.5 max-h-24 overflow-y-auto">
@@ -489,7 +546,7 @@ export default function App() {
 
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
                 <div>
-                  <span className="text-xs uppercase font-bold text-slate-400">Focus Timers Quick State</span>
+                  <span className="text-xs uppercase font-bold text-slate-400">Focus Timers State</span>
                   <div className="grid grid-cols-2 gap-2 mt-3">
                     {slots.map(s => (
                       <div key={s.id} className="bg-slate-950/50 p-2 rounded-xl border border-slate-800 text-center">
@@ -505,20 +562,42 @@ export default function App() {
               </div>
             </div>
 
-            {/* Daily Editable Checklist Window */}
+            {/* Daily Execution Checklist + Date History Selector */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
                 <div className="flex items-center space-x-2">
                   <CheckSquare className="w-5 h-5 text-amber-400" />
-                  <h3 className="font-bold text-sm text-slate-100">Today's Execution Checklist ({todayDateStr})</h3>
+                  <h3 className="font-bold text-sm text-slate-100">Daily Execution History & Log</h3>
                 </div>
-                <span className="text-xs text-slate-400">Auto-persisted daily log</span>
+                
+                {/* Date Navigator */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-slate-400 flex items-center space-x-1">
+                    <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                    <span>View Date:</span>
+                  </span>
+                  <input 
+                    type="date"
+                    value={selectedTaskDate}
+                    onChange={(e) => setSelectedTaskDate(e.target.value)}
+                    className="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1 text-xs text-slate-200 font-mono"
+                  />
+                  {selectedTaskDate !== todayDateStr && (
+                    <button 
+                      onClick={() => setSelectedTaskDate(todayDateStr)} 
+                      className="px-2 py-1 bg-amber-950 text-amber-400 rounded-lg text-[10px] font-bold border border-amber-800/50"
+                    >
+                      Reset to Today
+                    </button>
+                  )}
+                </div>
               </div>
 
+              {/* Add Task for the selected date */}
               <form onSubmit={addTask} className="flex gap-2 text-xs">
                 <input 
                   type="text" 
-                  placeholder="e.g. Solve 50 Rotational Motion PYQs..." 
+                  placeholder={`Add task for ${selectedTaskDate}...`} 
                   value={newTaskInput.text}
                   onChange={(e) => setNewTaskInput({ ...newTaskInput, text: e.target.value })}
                   className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
@@ -536,38 +615,42 @@ export default function App() {
                 </button>
               </form>
 
+              {/* Tasks List */}
               <div className="divide-y divide-slate-800/60">
-                {dailyTasks.map(t => (
-                  <div key={t.id} className="py-2.5 flex justify-between items-center hover:bg-slate-800/30 px-2 rounded-xl transition">
-                    <div className="flex items-center space-x-3 cursor-pointer" onClick={() => toggleTask(t.id)}>
-                      <div className={`w-5 h-5 rounded-lg border flex items-center justify-center transition ${
-                        t.completed ? 'bg-emerald-600 border-emerald-500 text-white' : 'border-slate-600 bg-slate-800'
-                      }`}>
-                        {t.completed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                {displayedTasks.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-4">No tasks recorded for {selectedTaskDate}. Add one above!</p>
+                ) : (
+                  displayedTasks.map(t => (
+                    <div key={t.id} className="py-2.5 flex justify-between items-center hover:bg-slate-800/30 px-2 rounded-xl transition">
+                      <div className="flex items-center space-x-3 cursor-pointer" onClick={() => toggleTask(t.id)}>
+                        <div className={`w-5 h-5 rounded-lg border flex items-center justify-center transition ${
+                          t.completed ? 'bg-emerald-600 border-emerald-500 text-white' : 'border-slate-600 bg-slate-800'
+                        }`}>
+                          {t.completed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                        <span className={`text-xs ${t.completed ? 'line-through text-slate-500' : 'text-slate-200'}`}>
+                          {t.text}
+                        </span>
                       </div>
-                      <span className={`text-xs ${t.completed ? 'line-through text-slate-500' : 'text-slate-200'}`}>
-                        {t.text}
-                      </span>
+                      <div className="flex items-center space-x-3">
+                        <span className="text-[11px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700">
+                          {t.timeSlot}
+                        </span>
+                        <button onClick={() => deleteTask(t.id)} className="text-slate-500 hover:text-rose-400">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <span className="text-[11px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700">
-                        {t.timeSlot}
-                      </span>
-                      <button onClick={() => deleteTask(t.id)} className="text-slate-500 hover:text-rose-400">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB 1: TIMERS (BLOCKS + 50/10 POMODORO) & GOOGLE SHEET MACRO SCHEDULE */}
+        {/* TAB 1: TIMERS & GOOGLE SHEET MACRO SCHEDULE */}
         {activeTab === 'daily' && (
           <div className="space-y-6">
-            {/* Mode Switcher */}
             <div className="flex justify-between items-center">
               <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl">
                 <button
@@ -585,7 +668,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Standard Subject Blocks */}
             {timerMode === 'blocks' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {slots.map((slot) => (
@@ -617,7 +699,6 @@ export default function App() {
               </div>
             )}
 
-            {/* 50/10 Pomodoro Timer Card */}
             {timerMode === 'pomodoro' && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-lg mx-auto text-center space-y-4">
                 <div className="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-950 text-amber-400 border border-amber-800/40">
@@ -643,17 +724,10 @@ export default function App() {
                     <RotateCcw className="w-4 h-4" />
                   </button>
                 </div>
-
-                <button
-                  onClick={requestNotificationPermission}
-                  className="text-[11px] text-amber-400/80 hover:text-amber-300 underline font-medium block mx-auto pt-2"
-                >
-                  🔔 Enable Laptop & Mobile System Alarm Notifications
-                </button>
               </div>
             )}
 
-            {/* Interactive Google Sheet Macro Schedule */}
+            {/* 2-Way Google Sheet Interactive Roadmap */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
               <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-2">
@@ -780,66 +854,147 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: QUESTION BANK & ERROR LOG */}
+        {/* TAB 3: SMART HIERARCHICAL QUESTION BANK & SPEED TRACKER */}
         {activeTab === 'questions' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-lg font-bold">Diagnostic Question Error Bank</h2>
-                <p className="text-xs text-slate-400">Hierarchical logging: Subject → Chapter → Topic → Question Mistake</p>
+                <h2 className="text-lg font-bold flex items-center space-x-2">
+                  <AlertCircle className="w-5 h-5 text-amber-400" />
+                  <span>Smart Diagnostic Question Bank</span>
+                </h2>
+                <p className="text-xs text-slate-400">Filter hierarchically: Subject → Chapter → Topic, track speed progression and mistake tags.</p>
               </div>
-              <button onClick={() => setIsModalOpen(true)} className="flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2 rounded-xl text-xs font-medium transition">
+              <button onClick={() => setIsModalOpen(true)} className="flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2 rounded-xl text-xs font-medium transition shadow-lg shadow-amber-600/20">
                 <PlusCircle className="w-4 h-4" />
                 <span>Log New Question</span>
               </button>
             </div>
 
-            <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-800/60 uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-800">
-                  <tr>
-                    <th className="p-3.5">Subject</th>
-                    <th className="p-3.5">Chapter & Topic</th>
-                    <th className="p-3.5">Question Text / Core Concept</th>
-                    <th className="p-3.5">Error Type</th>
-                    <th className="p-3.5">Time</th>
-                    <th className="p-3.5">Revisions</th>
-                    <th className="p-3.5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {questions.map((q) => (
-                    <tr key={q.id}>
-                      <td className="p-3.5 font-bold text-white">{q.subject}</td>
-                      <td className="p-3.5">
-                        <div className="font-semibold text-slate-200">{q.chapter}</div>
-                        <div className="text-[11px] text-amber-400">{q.topic || 'General'}</div>
-                      </td>
-                      <td className="p-3.5 max-w-xs">{q.questionText || 'Question details'}</td>
-                      <td className="p-3.5">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800/40">
-                          {q.errorType}
-                        </span>
-                      </td>
-                      <td className="p-3.5 font-mono">{q.timeSpent}s</td>
-                      <td className="p-3.5">
-                        <button 
-                          onClick={() => incrementQuestionRevision(q.id)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-600 text-slate-200 font-mono font-bold transition flex items-center space-x-1"
+            {/* Cascading Filter Bar */}
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">1. Subject</label>
+                <select 
+                  value={filterSubject} 
+                  onChange={(e) => { setFilterSubject(e.target.value); setFilterChapter('All'); setFilterTopic('All'); }}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
+                >
+                  {subjectsList.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">2. Chapter</label>
+                <select 
+                  value={filterChapter} 
+                  onChange={(e) => { setFilterChapter(e.target.value); setFilterTopic('All'); }}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
+                >
+                  {chaptersList.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">3. Topic</label>
+                <select 
+                  value={filterTopic} 
+                  onChange={(e) => setFilterTopic(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
+                >
+                  {topicsList.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Filtered Question Cards */}
+            <div className="space-y-4">
+              {filteredQuestions.length === 0 ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
+                  No questions match your current filters. Clear the dropdowns or log a new question above!
+                </div>
+              ) : (
+                filteredQuestions.map(q => (
+                  <div key={q.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition space-y-4">
+                    {/* Header Breadcrumb */}
+                    <div className="flex flex-wrap justify-between items-center gap-2">
+                      <div className="flex items-center space-x-2 text-xs">
+                        <span className="font-bold text-amber-400">{q.subject}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                        <span className="font-semibold text-slate-200">{q.chapter}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                        <span className="text-slate-400">{q.topic}</span>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        {/* Difficulty Mastery Selector */}
+                        <select
+                          value={q.difficulty || 'Moderate'}
+                          onChange={(e) => updateQuestionMastery(q.id, e.target.value)}
+                          className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-200"
                         >
-                          <span>{q.revCount || 0}x</span>
-                          <RotateCcw className="w-3 h-3" />
-                        </button>
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <button onClick={() => deleteQuestion(q.id)} className="text-slate-500 hover:text-red-400">
+                          <option value="Easy">🟢 Easy</option>
+                          <option value="Moderate">🟡 Moderate</option>
+                          <option value="Hard">🔴 Hard</option>
+                        </select>
+
+                        {/* Error Type Selector */}
+                        <select
+                          value={q.errorType}
+                          onChange={(e) => updateQuestionErrorType(q.id, e.target.value)}
+                          className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-bold text-rose-300"
+                        >
+                          <option value="Calculation Error">Calculation Error</option>
+                          <option value="Conceptual Error">Conceptual Error</option>
+                          <option value="Formula Lapse">Formula Lapse</option>
+                          <option value="Misread Question">Misread Question</option>
+                          <option value="Unit/Sign Error">Unit/Sign Error</option>
+                          <option value="Overthinking">Overthinking</option>
+                        </select>
+
+                        <button onClick={() => deleteQuestion(q.id)} className="text-slate-500 hover:text-rose-400 p-1">
                           <Trash2 className="w-4 h-4" />
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    </div>
+
+                    {/* Question Content */}
+                    <div className="text-xs text-slate-200 bg-slate-950/60 p-3 rounded-xl border border-slate-800 leading-relaxed font-mono">
+                      {q.questionText}
+                    </div>
+
+                    {/* Attempt Speed Progression Timeline */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/60">
+                      <div className="flex items-center space-x-2">
+                        <History className="w-4 h-4 text-cyan-400" />
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Solve Speed Progression:</span>
+                        <div className="flex items-center space-x-1.5 font-mono text-xs">
+                          {q.attempts && q.attempts.map((att, idx) => (
+                            <React.Fragment key={idx}>
+                              <span className={`px-2 py-0.5 rounded-md font-bold ${
+                                idx === q.attempts.length - 1 
+                                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60' 
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {att}s
+                              </span>
+                              {idx < q.attempts.length - 1 && <span className="text-slate-600">→</span>}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setAttemptModalData(q)}
+                        className="flex items-center space-x-1.5 bg-slate-800 hover:bg-amber-600 text-slate-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Log Re-Attempt ({q.attempts?.length || 0} done)</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
@@ -853,7 +1008,7 @@ export default function App() {
                   <TrendingUp className="w-5 h-5 text-amber-400" />
                   <span>Mock Telemetry, Rank Tracking & Score Graphs</span>
                 </h2>
-                <p className="text-xs text-slate-400">Filtered progression analytics</p>
+                <p className="text-xs text-slate-400">Weekly and monthly progression toward 700+</p>
               </div>
               <div className="flex items-center space-x-3">
                 <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs">
@@ -971,7 +1126,164 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL: ADD MOCK TEST */}
+      {/* MODAL: LOG RE-ATTEMPT SPEED */}
+      {attemptModalData && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div className="border-b border-slate-800 pb-3 flex justify-between items-start">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-amber-400">Log Re-Attempt Solve Time</span>
+                <h3 className="text-sm font-bold text-white mt-0.5">{attemptModalData.chapter}</h3>
+              </div>
+              <button onClick={() => setAttemptModalData(null)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={logNewAttempt} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1">Time taken to solve (in seconds):</label>
+                <input 
+                  type="number" 
+                  required
+                  placeholder="e.g. 25"
+                  value={newAttemptSeconds} 
+                  onChange={(e) => setNewAttemptSeconds(e.target.value)} 
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white font-mono text-base"
+                />
+              </div>
+              <div className="flex space-x-2 pt-2">
+                <button type="button" onClick={() => setAttemptModalData(null)} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2.5 rounded-xl font-semibold transition">Cancel</button>
+                <button type="submit" className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl font-semibold transition">Save Speed</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD NEW QUESTION */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold">Log Question Mistake</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={handleAddQuestion} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Subject</label>
+                  <select value={newQ.subject} onChange={(e) => setNewQ({ ...newQ, subject: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white">
+                    <option value="Physics">Physics</option><option value="Chemistry">Chemistry</option><option value="Biology">Biology</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Chapter</label>
+                  <input type="text" required placeholder="e.g. Rotational Motion" value={newQ.chapter} onChange={(e) => setNewQ({ ...newQ, chapter: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Specific Subtopic</label>
+                <input type="text" placeholder="e.g. Moment of Inertia" value={newQ.topic} onChange={(e) => setNewQ({ ...newQ, topic: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Question Summary / Concept</label>
+                <textarea rows="2" placeholder="Describe the critical point where the mistake happened..." value={newQ.questionText} onChange={(e) => setNewQ({ ...newQ, questionText: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Initial Mastery</label>
+                  <select value={newQ.difficulty} onChange={(e) => setNewQ({ ...newQ, difficulty: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white">
+                    <option value="Easy">Easy</option><option value="Moderate">Moderate</option><option value="Hard">Hard</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Error Type</label>
+                  <select value={newQ.errorType} onChange={(e) => setNewQ({ ...newQ, errorType: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white">
+                    <option value="Calculation Error">Calculation</option>
+                    <option value="Conceptual Error">Concept</option>
+                    <option value="Formula Lapse">Formula</option>
+                    <option value="Misread Question">Misread</option>
+                    <option value="Unit/Sign Error">Unit/Sign</option>
+                    <option value="Overthinking">Overthinking</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">1st Time (s)</label>
+                  <input type="number" value={newQ.initialTime} onChange={(e) => setNewQ({ ...newQ, initialTime: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white font-mono" />
+                </div>
+              </div>
+
+              <div className="flex space-x-2 pt-2">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2.5 rounded-xl font-semibold transition">Cancel</button>
+                <button type="submit" className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl font-semibold transition">Save Question</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SM-2 RECALL REVIEW */}
+      {selectedTopicForReview && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="border-b border-slate-800 pb-3 flex justify-between items-start">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-amber-400">SM-2 Quality Grading</span>
+                <h3 className="text-base font-bold text-white mt-0.5">{selectedTopicForReview.topic}</h3>
+              </div>
+              <button onClick={() => setSelectedTopicForReview(null)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-2 text-xs">
+              {[
+                { grade: 5, label: 'Grade 5: 100% Instant Perfect Recall' },
+                { grade: 4, label: 'Grade 4: 80% High Recall (Minor hesitation)' },
+                { grade: 3, label: 'Grade 3: 60% Moderate Recall (Required effort)' },
+                { grade: 2, label: 'Grade 2: 40% Weak (Reset interval)' },
+                { grade: 1, label: 'Grade 1: 0% Total Blackout (Reset)' }
+              ].map((btn) => (
+                <button key={btn.grade} onClick={() => submitSM2Review(btn.grade)} className="w-full text-left p-3 rounded-xl border border-slate-800 bg-slate-950/50 hover:border-amber-500 transition font-medium text-slate-200">
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD SM-2 TOPIC */}
+      {isTopicModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold">Add SM-2 Revision Topic</h3>
+              <button onClick={() => setIsTopicModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={handleAddTopic} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1">Subject</label>
+                <select value={newTopic.subject} onChange={(e) => setNewTopic({ ...newTopic, subject: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white">
+                  <option value="Physics">Physics</option><option value="Chemistry">Chemistry</option><option value="Biology">Biology</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Topic Name</label>
+                <input type="text" required placeholder="e.g. Photoelectric Effect Equations" value={newTopic.topic} onChange={(e) => setNewTopic({ ...newTopic, topic: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Target Revision Date</label>
+                <input type="date" value={newTopic.nextDue} onChange={(e) => setNewTopic({ ...newTopic, nextDue: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white font-mono" />
+              </div>
+              <div className="flex space-x-2 pt-2">
+                <button type="button" onClick={() => setIsTopicModalOpen(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2.5 rounded-xl font-semibold transition">Cancel</button>
+                <button type="submit" className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl font-semibold transition">Add Topic</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD MOCK */}
       {isMockModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -1009,123 +1321,6 @@ export default function App() {
               <div className="flex space-x-2 pt-2">
                 <button type="button" onClick={() => setIsMockModalOpen(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2.5 rounded-xl font-semibold transition">Cancel</button>
                 <button type="submit" className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl font-semibold transition">Save Score</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: SM-2 RECALL REVIEW */}
-      {selectedTopicForReview && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="border-b border-slate-800 pb-3 flex justify-between items-start">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-amber-400">SM-2 Quality Grading</span>
-                <h3 className="text-base font-bold text-white mt-0.5">{selectedTopicForReview.topic}</h3>
-              </div>
-              <button onClick={() => setSelectedTopicForReview(null)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="space-y-2 text-xs">
-              {[
-                { grade: 5, label: 'Grade 5: 100% Instant Perfect Recall' },
-                { grade: 4, label: 'Grade 4: 80% High Recall (Minor hesitation)' },
-                { grade: 3, label: 'Grade 3: 60% Moderate Recall (Required effort)' },
-                { grade: 2, label: 'Grade 2: 40% Weak (Reset interval)' },
-                { grade: 1, label: 'Grade 1: 0% Total Blackout (Reset)' }
-              ].map((btn) => (
-                <button key={btn.grade} onClick={() => submitSM2Review(btn.grade)} className="w-full text-left p-3 rounded-xl border border-slate-800 bg-slate-950/50 hover:border-amber-500 transition font-medium text-slate-200">
-                  {btn.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ADD TOPIC */}
-      {isTopicModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold">Add SM-2 Revision Topic</h3>
-              <button onClick={() => setIsTopicModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
-            </div>
-            <form onSubmit={handleAddTopic} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1">Subject</label>
-                <select value={newTopic.subject} onChange={(e) => setNewTopic({ ...newTopic, subject: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white">
-                  <option value="Physics">Physics</option><option value="Chemistry">Chemistry</option><option value="Biology">Biology</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Topic Name</label>
-                <input type="text" required placeholder="e.g. Photoelectric Effect Equations" value={newTopic.topic} onChange={(e) => setNewTopic({ ...newTopic, topic: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Target Revision Date</label>
-                <input type="date" value={newTopic.nextDue} onChange={(e) => setNewTopic({ ...newTopic, nextDue: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white font-mono" />
-              </div>
-              <div className="flex space-x-2 pt-2">
-                <button type="button" onClick={() => setIsTopicModalOpen(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2.5 rounded-xl font-semibold transition">Cancel</button>
-                <button type="submit" className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl font-semibold transition">Add Topic</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ADD HIERARCHICAL QUESTION */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold">Log Question Mistake</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
-            </div>
-            <form onSubmit={handleAddQuestion} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1">Subject</label>
-                  <select value={newQ.subject} onChange={(e) => setNewQ({ ...newQ, subject: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white">
-                    <option value="Physics">Physics</option><option value="Chemistry">Chemistry</option><option value="Biology">Biology</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">Chapter</label>
-                  <input type="text" required placeholder="e.g. Optics" value={newQ.chapter} onChange={(e) => setNewQ({ ...newQ, chapter: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">Specific Topic</label>
-                <input type="text" placeholder="e.g. Total Internal Reflection" value={newQ.topic} onChange={(e) => setNewQ({ ...newQ, topic: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">Question Summary / Concept</label>
-                <textarea rows="2" placeholder="Describe the critical step where the error happened..." value={newQ.questionText} onChange={(e) => setNewQ({ ...newQ, questionText: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1">Error Type</label>
-                  <select value={newQ.errorType} onChange={(e) => setNewQ({ ...newQ, errorType: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white">
-                    <option value="Conceptual Error">Conceptual Error</option>
-                    <option value="Calculation Mistake">Calculation Mistake</option>
-                    <option value="Misread Question">Misread Question</option>
-                    <option value="Formula Memory Lapse">Formula Memory Lapse</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">Time Spent (seconds)</label>
-                  <input type="number" value={newQ.timeSpent} onChange={(e) => setNewQ({ ...newQ, timeSpent: Number(e.target.value) })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white font-mono" />
-                </div>
-              </div>
-
-              <div className="flex space-x-2 pt-2">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2.5 rounded-xl font-semibold transition">Cancel</button>
-                <button type="submit" className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl font-semibold transition">Save Question</button>
               </div>
             </form>
           </div>
