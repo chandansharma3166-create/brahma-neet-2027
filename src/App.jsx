@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Clock, AlertCircle, RotateCcw, Play, Pause, 
   BarChart2, PlusCircle, RefreshCw, X, Trash2, Check,
-  BrainCircuit, Calendar, TrendingUp, BookOpen, ExternalLink,
-  Home, CheckSquare, Edit3, Award, Flame, Bell, Filter, Timer, 
-  BellRing, ChevronRight, ChevronDown, History, Zap, Image, Eye,
-  Activity, CheckCircle2, CalendarDays, User, LogOut, Lock, Sparkles,
-  CloudUpload, ShieldCheck
+  BrainCircuit, Calendar, TrendingUp, BookOpen,
+  Home, CheckSquare, Edit3, Award, Flame, Bell,
+  BellRing, ChevronRight, History, Zap, Image, Eye,
+  Activity, CheckCircle2, CalendarDays, LogOut, Sparkles,
+  CloudUpload
 } from 'lucide-react';
 import { 
   ResponsiveContainer, LineChart, Line, BarChart, Bar, 
@@ -15,7 +15,7 @@ import {
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRjm0L9b_-804uxLitV3kCw3aBeSuqqFhzm8xgPpqd81yiDs75CejBs1OTI1NCcE2F/exec";
 
-// Canvas Image Compressor (~25KB Output)
+// Image Compressor
 const compressImage = (file, maxWidth = 600, quality = 0.6) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -95,7 +95,7 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  // Main UI State
+  // UI State
   const [activeTab, setActiveTab] = useState('home');
   const [sheetSchedule, setSheetSchedule] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -119,7 +119,7 @@ export default function App() {
 
   const [analyticsScope, setAnalyticsScope] = useState('7');
 
-  // Timers State
+  // Timers
   const [timerMode, setTimerMode] = useState('blocks');
   const [pomoState, setPomoState] = useState({
     mode: 'work',
@@ -147,7 +147,7 @@ export default function App() {
   const [mockTests, setMockTests] = useState([]);
   const [mockFilter, setMockFilter] = useState('All');
 
-  // Modals & Forms
+  // Modals & Inputs
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
   const [isMockModalOpen, setIsMockModalOpen] = useState(false);
@@ -160,54 +160,58 @@ export default function App() {
   const [newQ, setNewQ] = useState({ subject: 'Physics', chapter: '', topic: '', questionText: '', image: null, errorType: 'Conceptual Error', difficulty: 'Moderate', initialTime: 60 });
   const [newMock, setNewMock] = useState({ name: '', date: todayDateStr, timeframe: 'Weekly', physics: 0, chemistry: 0, biology: 0, negativeMarks: 0, rank: 0 });
 
-  // Restore Per-User Data
+  // Load User Data
   useEffect(() => {
     if (!currentUser) return;
     const prefix = `brahma_user_${currentUser.username}_`;
 
-    const savedTasks = localStorage.getItem(prefix + 'tasks');
-    setDailyTasks(savedTasks ? JSON.parse(savedTasks) : []);
+    try {
+      const savedTasks = localStorage.getItem(prefix + 'tasks');
+      setDailyTasks(savedTasks ? JSON.parse(savedTasks) : []);
 
-    const savedDwar = localStorage.getItem(prefix + 'dwar');
-    setDwarLogs(savedDwar ? JSON.parse(savedDwar) : []);
+      const savedDwar = localStorage.getItem(prefix + 'dwar');
+      setDwarLogs(savedDwar ? JSON.parse(savedDwar) : []);
 
-    const savedDeck = localStorage.getItem(prefix + 'deck');
-    setRevisionDeck(savedDeck ? JSON.parse(savedDeck) : []);
+      const savedDeck = localStorage.getItem(prefix + 'deck');
+      setRevisionDeck(savedDeck ? JSON.parse(savedDeck) : []);
 
-    const savedQuestions = localStorage.getItem(prefix + 'questions');
-    setQuestions(savedQuestions ? JSON.parse(savedQuestions) : []);
+      const savedQuestions = localStorage.getItem(prefix + 'questions');
+      setQuestions(savedQuestions ? JSON.parse(savedQuestions) : []);
 
-    const savedMocks = localStorage.getItem(prefix + 'mocks');
-    setMockTests(savedMocks ? JSON.parse(savedMocks) : []);
+      const savedMocks = localStorage.getItem(prefix + 'mocks');
+      setMockTests(savedMocks ? JSON.parse(savedMocks) : []);
 
-    const savedSlots = localStorage.getItem(prefix + 'slots');
-    if (savedSlots) {
-      const parsedSlots = JSON.parse(savedSlots);
-      const now = Date.now();
-      const updated = parsedSlots.map(s => {
-        if (s.isRunning && s.targetEndTime) {
-          const remaining = Math.max(0, Math.round((s.targetEndTime - now) / 1000));
-          return { ...s, timeLeft: remaining, isRunning: remaining > 0 };
-        }
-        return s;
-      });
-      setSlots(updated);
-    }
-
-    const savedPomo = localStorage.getItem(prefix + 'pomo');
-    if (savedPomo) {
-      const parsedPomo = JSON.parse(savedPomo);
-      const now = Date.now();
-      if (parsedPomo.isRunning && parsedPomo.targetEndTime) {
-        const remaining = Math.max(0, Math.round((parsedPomo.targetEndTime - now) / 1000));
-        setPomoState({ ...parsedPomo, timeLeft: remaining, isRunning: remaining > 0 });
-      } else {
-        setPomoState(parsedPomo);
+      const savedSlots = localStorage.getItem(prefix + 'slots');
+      if (savedSlots) {
+        const parsedSlots = JSON.parse(savedSlots);
+        const now = Date.now();
+        const updated = parsedSlots.map(s => {
+          if (s.isRunning && s.targetEndTime) {
+            const remaining = Math.max(0, Math.round((s.targetEndTime - now) / 1000));
+            return { ...s, timeLeft: remaining, isRunning: remaining > 0 };
+          }
+          return s;
+        });
+        setSlots(updated);
       }
+
+      const savedPomo = localStorage.getItem(prefix + 'pomo');
+      if (savedPomo) {
+        const parsedPomo = JSON.parse(savedPomo);
+        const now = Date.now();
+        if (parsedPomo.isRunning && parsedPomo.targetEndTime) {
+          const remaining = Math.max(0, Math.round((parsedPomo.targetEndTime - now) / 1000));
+          setPomoState({ ...parsedPomo, timeLeft: remaining, isRunning: remaining > 0 });
+        } else {
+          setPomoState(parsedPomo);
+        }
+      }
+    } catch (err) {
+      console.error("Local storage load error:", err);
     }
   }, [currentUser]);
 
-  // Sync to LocalStorage
+  // Sync Data
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_tasks`, JSON.stringify(dailyTasks)); }, [dailyTasks, currentUser]);
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_dwar`, JSON.stringify(dwarLogs)); }, [dwarLogs, currentUser]);
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_deck`, JSON.stringify(revisionDeck)); }, [revisionDeck, currentUser]);
@@ -216,12 +220,15 @@ export default function App() {
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_slots`, JSON.stringify(slots)); }, [slots, currentUser]);
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_pomo`, JSON.stringify(pomoState)); }, [pomoState, currentUser]);
 
-  // Sound Engine
+  // Sound Alarm Engine
   const playAlertSound = () => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const audioCtx = new AudioCtx();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       
       const playTone = (freq, start, duration) => {
         const osc = audioCtx.createOscillator();
@@ -240,7 +247,7 @@ export default function App() {
       playTone(880.00, 0.2, 0.35);
       playTone(1174.66, 0.45, 0.6);
     } catch (e) {
-      console.log('Audio alert:', e);
+      console.log('Audio error:', e);
     }
   };
 
@@ -253,9 +260,10 @@ export default function App() {
   };
 
   const requestNotificationPermission = () => {
+    playAlertSound(); // Warm up audio context on click
     if ('Notification' in window) {
       Notification.requestPermission().then(permission => {
-        if (permission === 'granted') triggerDeviceAlert("🔔 Brahma Alarms Active", "Timer alerts are configured.");
+        if (permission === 'granted') triggerDeviceAlert("🔔 Brahma Alarms Active", "Timer alarms are now enabled.");
       });
     }
   };
@@ -269,6 +277,8 @@ export default function App() {
       const json = await res.json();
       if (json && json.status === 'success') {
         if (Array.isArray(json.schedule)) setSheetSchedule(json.schedule);
+        else if (Array.isArray(json.data)) setSheetSchedule(json.data);
+        
         if (Array.isArray(json.tasks) && json.tasks.length > 0) setDailyTasks(json.tasks);
         if (Array.isArray(json.dwar) && json.dwar.length > 0) setDwarLogs(json.dwar);
         if (Array.isArray(json.questions) && json.questions.length > 0) {
@@ -280,7 +290,7 @@ export default function App() {
         }
         if (Array.isArray(json.mocks) && json.mocks.length > 0) setMockTests(json.mocks);
         if (Array.isArray(json.sm2Deck) && json.sm2Deck.length > 0) setRevisionDeck(json.sm2Deck);
-        setSyncStatusMsg('Synced with Google Sheets Cloud!');
+        setSyncStatusMsg('Synced with Google Sheets!');
       }
     } catch (err) {
       console.error("Cloud fetch error:", err);
@@ -307,10 +317,10 @@ export default function App() {
           sm2Deck: revisionDeck
         })
       });
-      setSyncStatusMsg('✅ 100% Backed up to Google Sheets!');
+      setSyncStatusMsg('✅ Backed up to Google Sheets!');
     } catch (err) {
       console.error("Cloud backup error:", err);
-      setSyncStatusMsg('Backup failed. Check internet.');
+      setSyncStatusMsg('Backup failed.');
     } finally {
       setIsSyncing(false);
       setTimeout(() => setSyncStatusMsg(''), 4000);
@@ -381,6 +391,7 @@ export default function App() {
   }, []);
 
   const toggleBlockTimer = (id) => {
+    playAlertSound();
     setSlots(slots.map(s => {
       if (s.id === id) {
         if (s.isRunning) return { ...s, isRunning: false, targetEndTime: null };
@@ -396,6 +407,7 @@ export default function App() {
   };
 
   const togglePomoTimer = () => {
+    playAlertSound();
     if (pomoState.isRunning) {
       setPomoState({ ...pomoState, isRunning: false, targetEndTime: null });
     } else {
@@ -489,7 +501,10 @@ export default function App() {
     setDwarLogs(dwarLogs.filter(d => d.id !== id));
   };
 
-  const dwarChartData = [...dwarLogs].sort((a, b) => new Date(a.date) - new Date(b.date)).slice(-14);
+  // Safe DWAR Chart Data
+  const dwarChartData = Array.isArray(dwarLogs) && dwarLogs.length > 0
+    ? [...dwarLogs].sort((a, b) => new Date(a.date) - new Date(b.date)).slice(-14)
+    : [{ date: todayDateStr, score: 0 }];
 
   // SM-2 Helpers
   const dueRevisionsToday = revisionDeck.filter(item => item.nextDue <= todayDateStr);
@@ -647,7 +662,7 @@ export default function App() {
     return m.timeframe === mockFilter;
   });
 
-  // Render Login Screen if not authenticated
+  // Login View
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
@@ -697,7 +712,7 @@ export default function App() {
               type="submit" 
               className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white py-3 rounded-xl font-bold text-sm transition shadow-lg shadow-orange-600/20 mt-2"
             >
-              {authForm.isRegister ? 'Create Independent Study Account' : 'Sign In to Dashboard'}
+              {authForm.isRegister ? 'Create Account' : 'Sign In to Dashboard'}
             </button>
           </form>
 
@@ -714,7 +729,7 @@ export default function App() {
     );
   }
 
-  // Render Dashboard
+  // Dashboard View
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40 px-4 py-3 flex justify-between items-center">
@@ -737,7 +752,7 @@ export default function App() {
             className="flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-full border border-amber-500/50 text-xs text-white font-semibold shadow-md shadow-amber-600/20 transition"
           >
             <CloudUpload className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Backup to Google Sheet</span>
+            <span className="hidden sm:inline">Backup Sheet</span>
           </button>
 
           <button 
@@ -950,7 +965,7 @@ export default function App() {
                 <Sparkles className="w-5 h-5 text-amber-400" />
                 <span>D.W.A.R. Daily Self-Analysis Framework</span>
               </h2>
-              <p className="text-xs text-slate-400">Dr. Abhimanyu Kumawat's 4-Pillar Daily Evaluation: Did • Will • Achievement • Regret</p>
+              <p className="text-xs text-slate-400">Dr. Abhimanyu Kumawat's 4-Pillar Evaluation: Did • Will • Achievement • Regret</p>
             </div>
 
             <form onSubmit={handleSaveDwar} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
@@ -1014,7 +1029,7 @@ export default function App() {
 
                 <div className="space-y-1.5">
                   <label className="block font-bold text-rose-400 flex items-center space-x-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <AlertCircle className="w-3.5 h-3.5" />
                     <span>R — Regret of the Day (Time Waste / Habit Trigger)</span>
                   </label>
                   <textarea 
@@ -1048,7 +1063,7 @@ export default function App() {
                   type="submit" 
                   className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2.5 rounded-xl font-bold text-xs transition shadow-lg shadow-amber-600/20"
                 >
-                  Save D.W.A.R. Analysis
+                  Save D.W.A.R. Evaluation
                 </button>
               </div>
             </form>
@@ -1076,7 +1091,7 @@ export default function App() {
 
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-slate-200">Historical D.W.A.R. Journal Entries</h3>
-              {dwarLogs.length === 0 ? (
+              {!dwarLogs || dwarLogs.length === 0 ? (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
                   No D.W.A.R. logs submitted yet. Fill out today's self-evaluation above!
                 </div>
@@ -1263,7 +1278,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: TIMERS & PERSISTENT BLOCKS */}
+        {/* TAB 3: TIMERS & GOOGLE SHEET SYLLABUS TABLE */}
         {activeTab === 'daily' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1342,13 +1357,23 @@ export default function App() {
               </div>
             )}
 
+            {/* Interactive Google Sheet Syllabus Roadmap */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
               <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-2">
                   <BookOpen className="w-4 h-4 text-amber-400" />
                   <h3 className="text-sm font-bold text-slate-200">Interactive Google Sheet Syllabus (Live 2-Way Sync)</h3>
                 </div>
-                <span className="text-xs text-slate-400">Total Chapters: {sheetSchedule.length}</span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-slate-400">Total Chapters: {sheetSchedule.length}</span>
+                  <button 
+                    onClick={fetchCloudData}
+                    className="p-1 text-emerald-400 hover:bg-slate-800 rounded-lg"
+                    title="Reload Google Sheet Data"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -1364,13 +1389,15 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
-                    {sheetSchedule.length === 0 ? (
+                    {!sheetSchedule || sheetSchedule.length === 0 ? (
                       <tr>
-                        <td colSpan="6" className="p-4 text-center text-slate-500">Loading schedule from Google Sheet...</td>
+                        <td colSpan="6" className="p-8 text-center text-slate-500">
+                          {isSyncing ? 'Fetching syllabus from Google Sheets...' : 'No Google Sheet schedule loaded yet. Click "Fetch Cloud" or "Sync Sheet" above.'}
+                        </td>
                       </tr>
                     ) : (
-                      sheetSchedule.map((row) => (
-                        <tr key={row.rowIndex} className="hover:bg-slate-800/30 transition">
+                      sheetSchedule.map((row, idx) => (
+                        <tr key={row.rowIndex || idx} className="hover:bg-slate-800/30 transition">
                           <td className="p-3 font-semibold text-white">{row.Subject}</td>
                           <td className="p-3">{row.Chapter}</td>
                           <td className="p-3 font-mono">{row.TargetHours}h</td>
