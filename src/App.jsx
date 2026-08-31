@@ -4,7 +4,7 @@ import {
   BarChart2, PlusCircle, RefreshCw, X, Trash2, Check,
   BrainCircuit, Calendar, TrendingUp, BookOpen, ExternalLink,
   Home, CheckSquare, Edit3, Award, Flame, Bell, Filter, Timer, 
-  BellRing, ChevronRight, ChevronDown, History, Zap, CheckCircle2
+  BellRing, ChevronRight, ChevronDown, History, Zap, Image, Eye
 } from 'lucide-react';
 import { 
   ResponsiveContainer, LineChart, Line, BarChart, Bar, 
@@ -61,9 +61,9 @@ export default function App() {
     ];
   });
 
-  // 5. Hierarchical Question Bank with Attempt History & Speed Tracking
+  // 5. Hierarchical Question Bank with Image Support & Attempt History
   const [questions, setQuestions] = useState(() => {
-    const saved = localStorage.getItem('brahma_questions_v2');
+    const saved = localStorage.getItem('brahma_questions_v3');
     return saved ? JSON.parse(saved) : [
       { 
         id: 1, 
@@ -71,9 +71,10 @@ export default function App() {
         chapter: 'Rotational Motion', 
         topic: 'Moment of Inertia', 
         questionText: 'Hollow cylinder vs Solid cylinder rolling acceleration ratio down an incline.',
+        image: null,
         errorType: 'Calculation Error',
         difficulty: 'Hard',
-        attempts: [110, 65, 30] // [Attempt 1 (110s), Attempt 2 (65s), Attempt 3 (30s)]
+        attempts: [110, 65, 30]
       },
       { 
         id: 2, 
@@ -81,6 +82,7 @@ export default function App() {
         chapter: 'Thermodynamics', 
         topic: 'Entropy & Gibbs Energy', 
         questionText: 'Spontaneity criteria when delta H is positive and delta S is positive.',
+        image: null,
         errorType: 'Conceptual Error',
         difficulty: 'Moderate',
         attempts: [85, 40]
@@ -90,7 +92,8 @@ export default function App() {
         subject: 'Biology', 
         chapter: 'Molecular Basis of Inheritance', 
         topic: 'Lac Operon', 
-        questionText: 'Inducer binding site on repressor protein vs operator gene.',
+        questionText: 'Identify labels A, B, C from the NCERT Lac Operon transcription diagram.',
+        image: null,
         errorType: 'Misread Question',
         difficulty: 'Easy',
         attempts: [45, 18, 12]
@@ -98,16 +101,34 @@ export default function App() {
     ];
   });
 
-  // Question Filter Controls
+  // Filters
   const [filterSubject, setFilterSubject] = useState('All');
   const [filterChapter, setFilterChapter] = useState('All');
   const [filterTopic, setFilterTopic] = useState('All');
 
-  // Attempt Log Modal
+  // Modals & Image Viewer
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
+  const [isMockModalOpen, setIsMockModalOpen] = useState(false);
+  const [selectedTopicForReview, setSelectedTopicForReview] = useState(null);
   const [attemptModalData, setAttemptModalData] = useState(null);
   const [newAttemptSeconds, setNewAttemptSeconds] = useState('');
+  const [previewImage, setPreviewImage] = useState(null);
 
-  // 6. Mock Test Telemetry
+  // Forms
+  const [newTopic, setNewTopic] = useState({ subject: 'Physics', topic: '', nextDue: todayDateStr });
+  const [newQ, setNewQ] = useState({ 
+    subject: 'Physics', 
+    chapter: '', 
+    topic: '', 
+    questionText: '', 
+    image: null,
+    errorType: 'Conceptual Error', 
+    difficulty: 'Moderate',
+    initialTime: 60 
+  });
+
+  // Mock Test Telemetry
   const [mockTests, setMockTests] = useState(() => {
     const saved = localStorage.getItem('brahma_mock_telemetry');
     return saved ? JSON.parse(saved) : [
@@ -118,24 +139,6 @@ export default function App() {
     ];
   });
   const [mockFilter, setMockFilter] = useState('All');
-
-  // Modals
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
-  const [isMockModalOpen, setIsMockModalOpen] = useState(false);
-  const [selectedTopicForReview, setSelectedTopicForReview] = useState(null);
-
-  // Forms
-  const [newTopic, setNewTopic] = useState({ subject: 'Physics', topic: '', nextDue: todayDateStr });
-  const [newQ, setNewQ] = useState({ 
-    subject: 'Physics', 
-    chapter: '', 
-    topic: '', 
-    questionText: '', 
-    errorType: 'Conceptual Error', 
-    difficulty: 'Moderate',
-    initialTime: 60 
-  });
   const [newMock, setNewMock] = useState({ name: '', date: todayDateStr, timeframe: 'Weekly', physics: 0, chemistry: 0, biology: 0, negativeMarks: 0, rank: 0 });
 
   // Web Audio Synth Notification
@@ -158,7 +161,6 @@ export default function App() {
     }
   };
 
-  // Device Notifications
   const triggerDeviceAlert = (title, message) => {
     playAlertSound();
     if (navigator.vibrate) navigator.vibrate([500, 250, 500, 250, 500]);
@@ -178,7 +180,7 @@ export default function App() {
   // LocalStorage Sync
   useEffect(() => { localStorage.setItem('brahma_daily_tasks', JSON.stringify(dailyTasks)); }, [dailyTasks]);
   useEffect(() => { localStorage.setItem('brahma_sm2_deck', JSON.stringify(revisionDeck)); }, [revisionDeck]);
-  useEffect(() => { localStorage.setItem('brahma_questions_v2', JSON.stringify(questions)); }, [questions]);
+  useEffect(() => { localStorage.setItem('brahma_questions_v3', JSON.stringify(questions)); }, [questions]);
   useEffect(() => { localStorage.setItem('brahma_mock_telemetry', JSON.stringify(mockTests)); }, [mockTests]);
 
   // Google Sheets Fetch
@@ -201,7 +203,6 @@ export default function App() {
     fetchGoogleSheet();
   }, []);
 
-  // Update Sheet 2-Way
   const updateSheetItem = async (rowIndex, status, strength, scheduledDate) => {
     setSheetSchedule(prev => prev.map(item => item.rowIndex === rowIndex ? {
       ...item,
@@ -221,7 +222,7 @@ export default function App() {
     }
   };
 
-  // Timers Tick
+  // Timer Tick
   useEffect(() => {
     const timer = setInterval(() => {
       setSlots(prevSlots =>
@@ -258,7 +259,7 @@ export default function App() {
     return `${hrs > 0 ? `${hrs}h ` : ''}${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
   };
 
-  // Task Helpers (Filtered by Selected History Date)
+  // Task Handlers
   const displayedTasks = dailyTasks.filter(t => t.date === selectedTaskDate);
   const completedTodayCount = displayedTasks.filter(t => t.completed).length;
   const progressPercent = displayedTasks.length > 0 ? Math.round((completedTodayCount / displayedTasks.length) * 100) : 0;
@@ -284,7 +285,7 @@ export default function App() {
     setDailyTasks(dailyTasks.filter(t => t.id !== id));
   };
 
-  // SM-2 Helpers
+  // SM-2 Spaced Repetition Handlers
   const dueRevisionsToday = revisionDeck.filter(item => item.nextDue <= todayDateStr);
 
   const deleteRevisionTopic = (id) => {
@@ -346,7 +347,7 @@ export default function App() {
     setSelectedTopicForReview(null);
   };
 
-  // Question Bank Cascading & Filtering
+  // Question Filters
   const subjectsList = ['All', ...new Set(questions.map(q => q.subject))];
   const chaptersList = ['All', ...new Set(questions.filter(q => filterSubject === 'All' || q.subject === filterSubject).map(q => q.chapter))];
   const topicsList = ['All', ...new Set(questions.filter(q => 
@@ -361,6 +362,18 @@ export default function App() {
     return true;
   });
 
+  // Image Upload Handler (Base64)
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewQ(prev => ({ ...prev, image: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleAddQuestion = (e) => {
     e.preventDefault();
     if (!newQ.chapter.trim()) return;
@@ -370,11 +383,12 @@ export default function App() {
       chapter: newQ.chapter,
       topic: newQ.topic || 'General Problem',
       questionText: newQ.questionText,
+      image: newQ.image,
       errorType: newQ.errorType,
       difficulty: newQ.difficulty,
       attempts: [Number(newQ.initialTime) || 60]
     }, ...questions]);
-    setNewQ({ subject: 'Physics', chapter: '', topic: '', questionText: '', errorType: 'Conceptual Error', difficulty: 'Moderate', initialTime: 60 });
+    setNewQ({ subject: 'Physics', chapter: '', topic: '', questionText: '', image: null, errorType: 'Conceptual Error', difficulty: 'Moderate', initialTime: 60 });
     setIsModalOpen(false);
   };
 
@@ -401,7 +415,7 @@ export default function App() {
     setQuestions(questions.filter(q => q.id !== id));
   };
 
-  // Mock Helpers
+  // Mock Test Helpers
   const handleAddMock = (e) => {
     e.preventDefault();
     if (!newMock.name.trim()) return;
@@ -494,13 +508,12 @@ export default function App() {
         })}
       </nav>
 
-      {/* Main Container */}
+      {/* Main Area */}
       <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto space-y-6">
         
-        {/* TAB 0: HOME PAGE & DATE-FILTERED TASK HISTORY */}
+        {/* TAB 0: HOME PAGE */}
         {activeTab === 'home' && (
           <div className="space-y-6">
-            {/* Top Metrics Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
                 <div>
@@ -562,7 +575,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Daily Execution Checklist + Date History Selector */}
+            {/* Daily Execution Checklist */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
                 <div className="flex items-center space-x-2">
@@ -570,7 +583,6 @@ export default function App() {
                   <h3 className="font-bold text-sm text-slate-100">Daily Execution History & Log</h3>
                 </div>
                 
-                {/* Date Navigator */}
                 <div className="flex items-center space-x-2">
                   <span className="text-xs text-slate-400 flex items-center space-x-1">
                     <Calendar className="w-3.5 h-3.5 text-amber-400" />
@@ -593,7 +605,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Add Task for the selected date */}
               <form onSubmit={addTask} className="flex gap-2 text-xs">
                 <input 
                   type="text" 
@@ -615,7 +626,6 @@ export default function App() {
                 </button>
               </form>
 
-              {/* Tasks List */}
               <div className="divide-y divide-slate-800/60">
                 {displayedTasks.length === 0 ? (
                   <p className="text-xs text-slate-500 text-center py-4">No tasks recorded for {selectedTaskDate}. Add one above!</p>
@@ -648,7 +658,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 1: TIMERS & GOOGLE SHEET MACRO SCHEDULE */}
+        {/* TAB 1: TIMERS & MACRO SCHEDULE */}
         {activeTab === 'daily' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -854,7 +864,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: SMART HIERARCHICAL QUESTION BANK & SPEED TRACKER */}
+        {/* TAB 3: SMART HIERARCHICAL QUESTION BANK & DIAGRAM SUPPORT */}
         {activeTab === 'questions' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -863,7 +873,7 @@ export default function App() {
                   <AlertCircle className="w-5 h-5 text-amber-400" />
                   <span>Smart Diagnostic Question Bank</span>
                 </h2>
-                <p className="text-xs text-slate-400">Filter hierarchically: Subject → Chapter → Topic, track speed progression and mistake tags.</p>
+                <p className="text-xs text-slate-400">Hierarchical filtering, diagram picture support, solve speed progression, and error tagging.</p>
               </div>
               <button onClick={() => setIsModalOpen(true)} className="flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2 rounded-xl text-xs font-medium transition shadow-lg shadow-amber-600/20">
                 <PlusCircle className="w-4 h-4" />
@@ -907,7 +917,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Filtered Question Cards */}
+            {/* Question Cards */}
             <div className="space-y-4">
               {filteredQuestions.length === 0 ? (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
@@ -927,7 +937,7 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        {/* Difficulty Mastery Selector */}
+                        {/* Difficulty Mastery */}
                         <select
                           value={q.difficulty || 'Moderate'}
                           onChange={(e) => updateQuestionMastery(q.id, e.target.value)}
@@ -938,7 +948,7 @@ export default function App() {
                           <option value="Hard">🔴 Hard</option>
                         </select>
 
-                        {/* Error Type Selector */}
+                        {/* Error Tag */}
                         <select
                           value={q.errorType}
                           onChange={(e) => updateQuestionErrorType(q.id, e.target.value)}
@@ -958,12 +968,38 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Question Content */}
-                    <div className="text-xs text-slate-200 bg-slate-950/60 p-3 rounded-xl border border-slate-800 leading-relaxed font-mono">
-                      {q.questionText}
+                    {/* Question Text & Diagram Image */}
+                    <div className="space-y-3">
+                      {q.questionText && (
+                        <div className="text-xs text-slate-200 bg-slate-950/60 p-3 rounded-xl border border-slate-800 leading-relaxed font-mono">
+                          {q.questionText}
+                        </div>
+                      )}
+
+                      {/* Question Diagram Thumbnail */}
+                      {q.image && (
+                        <div className="flex items-center space-x-3 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800 w-fit">
+                          <img 
+                            src={q.image} 
+                            alt="Question Diagram" 
+                            className="w-16 h-16 object-cover rounded-lg border border-slate-700 cursor-pointer hover:opacity-80 transition"
+                            onClick={() => setPreviewImage(q.image)}
+                          />
+                          <div>
+                            <span className="text-[11px] font-bold text-slate-300 block">Question Diagram / Graph Attached</span>
+                            <button 
+                              onClick={() => setPreviewImage(q.image)}
+                              className="text-xs text-amber-400 hover:underline flex items-center space-x-1 mt-0.5"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Click to enlarge full diagram</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Attempt Speed Progression Timeline */}
+                    {/* Attempt Speed Timeline */}
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/60">
                       <div className="flex items-center space-x-2">
                         <History className="w-4 h-4 text-cyan-400" />
@@ -999,7 +1035,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 4: MOCK TELEMETRY & ANALYTICS */}
+        {/* TAB 4: MOCK TELEMETRY */}
         {activeTab === 'mock' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1030,7 +1066,6 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Score Growth */}
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
                 <h3 className="text-sm font-bold text-slate-200">Total Score Progression (Target: 700+)</h3>
                 <div className="h-64 w-full">
@@ -1047,7 +1082,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Rank Progression */}
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
                 <h3 className="text-sm font-bold text-slate-200">Rank Progression (Lower is Better)</h3>
                 <div className="h-64 w-full">
@@ -1065,7 +1099,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Subject Specific Score Distribution */}
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
               <h3 className="text-sm font-bold text-slate-200">Subject Breakdown (Physics / Chemistry / Biology)</h3>
               <div className="h-64 w-full">
@@ -1126,6 +1159,21 @@ export default function App() {
         )}
       </main>
 
+      {/* FULLSCREEN IMAGE LIGHTBOX MODAL */}
+      {previewImage && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-3xl max-h-[85vh] p-2 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-3 -right-3 bg-slate-800 hover:bg-slate-700 text-white p-2 rounded-full border border-slate-700 shadow-lg"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <img src={previewImage} alt="Diagram full view" className="max-h-[80vh] w-auto rounded-xl object-contain" />
+          </div>
+        </div>
+      )}
+
       {/* MODAL: LOG RE-ATTEMPT SPEED */}
       {attemptModalData && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1158,10 +1206,10 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: ADD NEW QUESTION */}
+      {/* MODAL: ADD NEW QUESTION WITH IMAGE UPLOAD */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="text-sm font-bold">Log Question Mistake</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
@@ -1188,6 +1236,32 @@ export default function App() {
               <div>
                 <label className="block text-slate-400 mb-1">Question Summary / Concept</label>
                 <textarea rows="2" placeholder="Describe the critical point where the mistake happened..." value={newQ.questionText} onChange={(e) => setNewQ({ ...newQ, questionText: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-white" />
+              </div>
+
+              {/* IMAGE UPLOAD FIELD */}
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold flex items-center space-x-1.5">
+                  <Image className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Attach Question Picture / Diagram (Optional)</span>
+                </label>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageUpload}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-slate-300 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white hover:file:bg-amber-500 cursor-pointer"
+                />
+                {newQ.image && (
+                  <div className="mt-2 relative w-fit">
+                    <img src={newQ.image} alt="Preview" className="w-20 h-20 object-cover rounded-lg border border-slate-700" />
+                    <button 
+                      type="button" 
+                      onClick={() => setNewQ(prev => ({ ...prev, image: null }))}
+                      className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white rounded-full p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-3">
