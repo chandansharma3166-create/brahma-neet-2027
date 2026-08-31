@@ -15,7 +15,7 @@ import {
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRjm0L9b_-804uxLitV3kCw3aBeSuqqFhzm8xgPpqd81yiDs75CejBs1OTI1NCcE2F/exec";
 
-// === CLIENT-SIDE IMAGE COMPRESSOR UTILITY ===
+// Canvas Image Compressor (~25KB Output)
 const compressImage = (file, maxWidth = 600, quality = 0.6) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -38,7 +38,6 @@ const compressImage = (file, maxWidth = 600, quality = 0.6) => {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Compress to JPEG with reduced quality (~20KB-35KB)
         const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
         resolve(compressedBase64);
       };
@@ -49,7 +48,7 @@ const compressImage = (file, maxWidth = 600, quality = 0.6) => {
 export default function App() {
   const todayDateStr = new Date().toISOString().split('T')[0];
 
-  // ================= AUTHENTICATION & MULTI-USER STATE =================
+  // Auth State
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('brahma_active_session');
     return saved ? JSON.parse(saved) : null;
@@ -96,7 +95,7 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  // ================= STATE INITIALIZATIONS =================
+  // Main UI State
   const [activeTab, setActiveTab] = useState('home');
   const [sheetSchedule, setSheetSchedule] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -120,7 +119,7 @@ export default function App() {
 
   const [analyticsScope, setAnalyticsScope] = useState('7');
 
-  // Timers
+  // Timers State
   const [timerMode, setTimerMode] = useState('blocks');
   const [pomoState, setPomoState] = useState({
     mode: 'work',
@@ -148,7 +147,7 @@ export default function App() {
   const [mockTests, setMockTests] = useState([]);
   const [mockFilter, setMockFilter] = useState('All');
 
-  // Modals
+  // Modals & Forms
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
   const [isMockModalOpen, setIsMockModalOpen] = useState(false);
@@ -161,7 +160,7 @@ export default function App() {
   const [newQ, setNewQ] = useState({ subject: 'Physics', chapter: '', topic: '', questionText: '', image: null, errorType: 'Conceptual Error', difficulty: 'Moderate', initialTime: 60 });
   const [newMock, setNewMock] = useState({ name: '', date: todayDateStr, timeframe: 'Weekly', physics: 0, chemistry: 0, biology: 0, negativeMarks: 0, rank: 0 });
 
-  // Load User Data upon Session Change
+  // Restore Per-User Data
   useEffect(() => {
     if (!currentUser) return;
     const prefix = `brahma_user_${currentUser.username}_`;
@@ -181,7 +180,6 @@ export default function App() {
     const savedMocks = localStorage.getItem(prefix + 'mocks');
     setMockTests(savedMocks ? JSON.parse(savedMocks) : []);
 
-    // Timers Restoration
     const savedSlots = localStorage.getItem(prefix + 'slots');
     if (savedSlots) {
       const parsedSlots = JSON.parse(savedSlots);
@@ -218,12 +216,12 @@ export default function App() {
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_slots`, JSON.stringify(slots)); }, [slots, currentUser]);
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_pomo`, JSON.stringify(pomoState)); }, [pomoState, currentUser]);
 
-  // Chime Audio Alert
+  // Sound Engine
   const playAlertSound = () => {
     try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      const audioCtx = new AudioContext();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const audioCtx = new AudioCtx();
       
       const playTone = (freq, start, duration) => {
         const osc = audioCtx.createOscillator();
@@ -242,7 +240,7 @@ export default function App() {
       playTone(880.00, 0.2, 0.35);
       playTone(1174.66, 0.45, 0.6);
     } catch (e) {
-      console.log('Audio error:', e);
+      console.log('Audio alert:', e);
     }
   };
 
@@ -257,12 +255,12 @@ export default function App() {
   const requestNotificationPermission = () => {
     if ('Notification' in window) {
       Notification.requestPermission().then(permission => {
-        if (permission === 'granted') triggerDeviceAlert("🔔 Brahma Alarms Active", "Your persistent timer alerts are now configured.");
+        if (permission === 'granted') triggerDeviceAlert("🔔 Brahma Alarms Active", "Timer alerts are configured.");
       });
     }
   };
 
-  // ================= GOOGLE SHEETS 2-WAY FULL CLOUD BACKUP =================
+  // Google Sheets Fetch & Backup
   const fetchCloudData = async () => {
     setIsSyncing(true);
     setSyncStatusMsg('Syncing from Google Sheets...');
@@ -286,7 +284,7 @@ export default function App() {
       }
     } catch (err) {
       console.error("Cloud fetch error:", err);
-      setSyncStatusMsg('Cloud sync offline (Local Active)');
+      setSyncStatusMsg('Cloud offline (Local Active)');
     } finally {
       setIsSyncing(false);
       setTimeout(() => setSyncStatusMsg(''), 4000);
@@ -312,7 +310,7 @@ export default function App() {
       setSyncStatusMsg('✅ 100% Backed up to Google Sheets!');
     } catch (err) {
       console.error("Cloud backup error:", err);
-      setSyncStatusMsg('Backup failed. Check internet connection.');
+      setSyncStatusMsg('Backup failed. Check internet.');
     } finally {
       setIsSyncing(false);
       setTimeout(() => setSyncStatusMsg(''), 4000);
@@ -352,7 +350,7 @@ export default function App() {
           if (slot.isRunning && slot.targetEndTime) {
             const diff = Math.round((slot.targetEndTime - now) / 1000);
             if (diff <= 0) {
-              triggerDeviceAlert(`⏰ ${slot.subject} Finished!`, "Session completed! Record any errors in the Question Bank.");
+              triggerDeviceAlert(`⏰ ${slot.subject} Finished!`, "Session completed! Record errors in question bank.");
               return { ...slot, timeLeft: 0, isRunning: false, targetEndTime: null };
             }
             return { ...slot, timeLeft: diff };
@@ -366,11 +364,11 @@ export default function App() {
         const diff = Math.round((prev.targetEndTime - now) / 1000);
         if (diff <= 0) {
           if (prev.mode === 'work') {
-            triggerDeviceAlert("🔥 50-Min Focus Completed!", "Take a 10-minute restorative break.");
+            triggerDeviceAlert("🔥 50-Min Focus Completed!", "Take a 10-minute break.");
             const newTarget = Date.now() + (prev.breakDuration * 60 * 1000);
             return { ...prev, mode: 'break', timeLeft: prev.breakDuration * 60, targetEndTime: newTarget, isRunning: true, completedSessions: prev.completedSessions + 1 };
           } else {
-            triggerDeviceAlert("☕ 10-Min Break Over!", "Ready to begin your next 50-minute study sprint?");
+            triggerDeviceAlert("☕ 10-Min Break Over!", "Start your next 50-minute study sprint?");
             const newTarget = Date.now() + (prev.workDuration * 60 * 1000);
             return { ...prev, mode: 'work', timeLeft: prev.workDuration * 60, targetEndTime: newTarget, isRunning: true };
           }
@@ -444,7 +442,7 @@ export default function App() {
     setDailyTasks(dailyTasks.filter(t => t.id !== id));
   };
 
-  // Execution Analytics
+  // Analytics Engine
   const generateExecutionAnalytics = () => {
     const dateMap = {};
     dailyTasks.forEach(task => {
@@ -570,7 +568,6 @@ export default function App() {
     return true;
   });
 
-  // Compressed Image Upload
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -650,7 +647,7 @@ export default function App() {
     return m.timeframe === mockFilter;
   });
 
-  // ================= RENDER LOGIN SCREEN =================
+  // Render Login Screen if not authenticated
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
@@ -717,10 +714,9 @@ export default function App() {
     );
   }
 
-  // ================= MAIN DASHBOARD =================
+  // Render Dashboard
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40 px-4 py-3 flex justify-between items-center">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center font-bold text-white shadow-lg shadow-orange-500/20">
@@ -735,7 +731,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Cloud Backup Button */}
           <button 
             onClick={backupAllToGoogleSheets}
             disabled={isSyncing}
@@ -772,14 +767,12 @@ export default function App() {
         </div>
       </header>
 
-      {/* Sync Status Banner */}
       {syncStatusMsg && (
         <div className="bg-amber-950/70 border-b border-amber-800/80 px-4 py-1.5 text-center text-xs text-amber-300 font-medium transition animate-pulse">
           {syncStatusMsg}
         </div>
       )}
 
-      {/* Navigation Tabs */}
       <nav className="flex space-x-1 p-2 bg-slate-900 border-b border-slate-800 text-sm overflow-x-auto">
         {[
           { id: 'home', label: 'Daily Command (Home)', icon: Home },
@@ -808,10 +801,7 @@ export default function App() {
         })}
       </nav>
 
-      {/* Main Container */}
       <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto space-y-6">
-        
-        {/* TAB 0: HOME PAGE */}
         {activeTab === 'home' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -870,7 +860,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Daily Execution Checklist */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
                 <div className="flex items-center space-x-2">
@@ -953,7 +942,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 1: D.W.A.R. SELF-ANALYSIS */}
+        {/* TAB 1: D.W.A.R. FRAMEWORK */}
         {activeTab === 'dwar' && (
           <div className="space-y-6">
             <div>
@@ -961,7 +950,7 @@ export default function App() {
                 <Sparkles className="w-5 h-5 text-amber-400" />
                 <span>D.W.A.R. Daily Self-Analysis Framework</span>
               </h2>
-              <p className="text-xs text-slate-400">Dr. Abhimanyu Kumawat's 4-Pillar Daily Self Evaluation: Did • Will • Achievement • Regret</p>
+              <p className="text-xs text-slate-400">Dr. Abhimanyu Kumawat's 4-Pillar Daily Evaluation: Did • Will • Achievement • Regret</p>
             </div>
 
             <form onSubmit={handleSaveDwar} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
@@ -1353,7 +1342,6 @@ export default function App() {
               </div>
             )}
 
-            {/* 2-Way Google Sheet Interactive Roadmap */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
               <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-2">
@@ -1430,7 +1418,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 4: SPACED REPETITION (SM-2) */}
+        {/* TAB 4: SPACED REPETITION */}
         {activeTab === 'spaced' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1480,7 +1468,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 5: SMART QUESTION BANK */}
+        {/* TAB 5: QUESTION BANK */}
         {activeTab === 'questions' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1489,7 +1477,7 @@ export default function App() {
                   <AlertCircle className="w-5 h-5 text-amber-400" />
                   <span>Smart Diagnostic Question Bank</span>
                 </h2>
-                <p className="text-xs text-slate-400">Hierarchical filtering, auto-compressed diagram support, solve speed progression, and error tagging.</p>
+                <p className="text-xs text-slate-400">Hierarchical filtering, diagram picture support, solve speed progression, and error tagging.</p>
               </div>
               <button onClick={() => setIsModalOpen(true)} className="flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2 rounded-xl text-xs font-medium transition shadow-lg shadow-amber-600/20">
                 <PlusCircle className="w-4 h-4" />
@@ -1767,7 +1755,7 @@ export default function App() {
         )}
       </main>
 
-      {/* FULLSCREEN IMAGE LIGHTBOX MODAL */}
+      {/* Lightbox Modal */}
       {previewImage && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-3xl max-h-[85vh] p-2 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -1782,7 +1770,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: LOG RE-ATTEMPT SPEED */}
+      {/* Re-attempt Modal */}
       {attemptModalData && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
@@ -1814,7 +1802,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: ADD NEW QUESTION */}
+      {/* Add Question Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
@@ -1904,7 +1892,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: SM-2 RECALL REVIEW */}
+      {/* SM-2 Recall Modal */}
       {selectedTopicForReview && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -1932,7 +1920,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: ADD SM-2 TOPIC */}
+      {/* Add Topic Modal */}
       {isTopicModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -1964,7 +1952,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: ADD MOCK */}
+      {/* Add Mock Modal */}
       {isMockModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
