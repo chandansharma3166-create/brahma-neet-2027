@@ -65,12 +65,8 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  // ================= USER-ISOLATED DATA HOOKS =================
-  const userKey = currentUser ? currentUser.username : 'guest';
-
+  // ================= STATE INITIALIZATIONS =================
   const [activeTab, setActiveTab] = useState('home');
-
-  // Google Sheets Live Schedule
   const [sheetSchedule, setSheetSchedule] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -79,7 +75,7 @@ export default function App() {
   const [dailyTasks, setDailyTasks] = useState([]);
   const [newTaskInput, setNewTaskInput] = useState({ text: '', timeSlot: '' });
 
-  // DWAR Journal & Analytics State
+  // DWAR Journal
   const [dwarLogs, setDwarLogs] = useState([]);
   const [dwarForm, setDwarForm] = useState({
     date: todayDateStr,
@@ -90,25 +86,30 @@ export default function App() {
     score: 8
   });
 
-  // Analytics Scope
   const [analyticsScope, setAnalyticsScope] = useState('7');
 
-  // Pomodoro & Slots
+  // ================= TIMESTAMP-BASED TIMERS (PERSISTENT & CROSS-DEVICE) =================
   const [timerMode, setTimerMode] = useState('blocks');
-  const [pomoState, setPomoState] = useState({
-    mode: 'work',
-    timeLeft: 50 * 60,
-    isRunning: false,
-    workDuration: 50,
-    breakDuration: 10,
-    completedSessions: 0
+
+  // 50/10 Pomodoro State with Target EndTime
+  const [pomoState, setPomoState] = useState(() => {
+    return {
+      mode: 'work',
+      timeLeft: 50 * 60,
+      isRunning: false,
+      workDuration: 50,
+      breakDuration: 10,
+      targetEndTime: null,
+      completedSessions: 0
+    };
   });
 
+  // NEET Subject Blocks with Target EndTime
   const [slots, setSlots] = useState([
-    { id: 'phy', name: 'Physics Block', durationMinutes: 150, timeLeft: 150 * 60, isRunning: false, subject: 'Physics' },
-    { id: 'chem', name: 'Chemistry Block', durationMinutes: 120, timeLeft: 120 * 60, isRunning: false, subject: 'Chemistry' },
-    { id: 'bio', name: 'Biology Block', durationMinutes: 90, timeLeft: 90 * 60, isRunning: false, subject: 'Biology' },
-    { id: 'rev', name: 'Targeted Revision', durationMinutes: 120, timeLeft: 120 * 60, isRunning: false, subject: 'Revision' }
+    { id: 'phy', name: 'Physics Block', durationMinutes: 150, timeLeft: 150 * 60, isRunning: false, targetEndTime: null, subject: 'Physics' },
+    { id: 'chem', name: 'Chemistry Block', durationMinutes: 120, timeLeft: 120 * 60, isRunning: false, targetEndTime: null, subject: 'Chemistry' },
+    { id: 'bio', name: 'Biology Block', durationMinutes: 90, timeLeft: 90 * 60, isRunning: false, targetEndTime: null, subject: 'Biology' },
+    { id: 'rev', name: 'Targeted Revision', durationMinutes: 120, timeLeft: 120 * 60, isRunning: false, targetEndTime: null, subject: 'Revision' }
   ]);
 
   // SM-2 Deck
@@ -179,52 +180,103 @@ export default function App() {
       { id: 1, name: 'Major Test 1', date: '2026-08-05', timeframe: 'Monthly', physics: 125, chemistry: 140, biology: 310, total: 575, negativeMarks: 24, rank: 420 },
       { id: 2, name: 'Major Test 2', date: '2026-08-12', timeframe: 'Weekly', physics: 135, chemistry: 145, biology: 325, total: 605, negativeMarks: 16, rank: 280 }
     ]);
+
+    // Persistent Timers Restoration
+    const savedSlots = localStorage.getItem(prefix + 'slots');
+    if (savedSlots) {
+      const parsedSlots = JSON.parse(savedSlots);
+      const now = Date.now();
+      const updated = parsedSlots.map(s => {
+        if (s.isRunning && s.targetEndTime) {
+          const remaining = Math.max(0, Math.round((s.targetEndTime - now) / 1000));
+          return { ...s, timeLeft: remaining, isRunning: remaining > 0 };
+        }
+        return s;
+      });
+      setSlots(updated);
+    }
+
+    const savedPomo = localStorage.getItem(prefix + 'pomo');
+    if (savedPomo) {
+      const parsedPomo = JSON.parse(savedPomo);
+      const now = Date.now();
+      if (parsedPomo.isRunning && parsedPomo.targetEndTime) {
+        const remaining = Math.max(0, Math.round((parsedPomo.targetEndTime - now) / 1000));
+        setPomoState({ ...parsedPomo, timeLeft: remaining, isRunning: remaining > 0 });
+      } else {
+        setPomoState(parsedPomo);
+      }
+    }
   }, [currentUser]);
 
-  // Sync back to per-user LocalStorage
+  // Sync to LocalStorage
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_tasks`, JSON.stringify(dailyTasks)); }, [dailyTasks, currentUser]);
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_dwar`, JSON.stringify(dwarLogs)); }, [dwarLogs, currentUser]);
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_deck`, JSON.stringify(revisionDeck)); }, [revisionDeck, currentUser]);
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_questions`, JSON.stringify(questions)); }, [questions, currentUser]);
   useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_mocks`, JSON.stringify(mockTests)); }, [mockTests, currentUser]);
+  useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_slots`, JSON.stringify(slots)); }, [slots, currentUser]);
+  useEffect(() => { if (currentUser) localStorage.setItem(`brahma_user_${currentUser.username}_pomo`, JSON.stringify(pomoState)); }, [pomoState, currentUser]);
 
-  // Web Audio Synth Notification
+  // ================= GUARANTEED HIGH-VOLUME ALERTS & CHIMES =================
   const playAlertSound = () => {
     try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.8);
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const audioCtx = new AudioContext();
+      
+      const playTone = (freq, start, duration) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
+        gain.gain.setValueAtTime(0.5, audioCtx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + start + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(audioCtx.currentTime + start);
+        osc.stop(audioCtx.currentTime + start + duration);
+      };
+
+      playTone(587.33, 0, 0.25); // D5
+      playTone(880.00, 0.2, 0.35); // A5
+      playTone(1174.66, 0.45, 0.6); // D6
     } catch (e) {
-      console.log('Audio error:', e);
+      console.log('Chime sound alert triggered:', e);
     }
   };
 
   const triggerDeviceAlert = (title, message) => {
     playAlertSound();
-    if (navigator.vibrate) navigator.vibrate([500, 250, 500, 250, 500]);
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body: message });
+    if (navigator.vibrate) {
+      navigator.vibrate([600, 300, 600, 300, 900]);
+    }
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification(title, {
+          body: message,
+          icon: '/favicon.svg',
+          requireInteraction: true
+        });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(p => {
+          if (p === 'granted') new Notification(title, { body: message });
+        });
+      }
     }
   };
 
   const requestNotificationPermission = () => {
     if ('Notification' in window) {
       Notification.requestPermission().then(permission => {
-        if (permission === 'granted') triggerDeviceAlert("🔔 Alerts Enabled", "Brahma notification system active.");
+        if (permission === 'granted') {
+          triggerDeviceAlert("🔔 Brahma Alarms Active", "Your persistent timer alerts are now configured.");
+        }
       });
     }
   };
 
-  // Google Sheets Fetch
+  // Google Sheets Schedule Fetch
   const fetchGoogleSheet = async () => {
     setIsSyncing(true);
     try {
@@ -263,35 +315,103 @@ export default function App() {
     }
   };
 
-  // Timer Tick Engine
+  // ================= ABSOLUTE TIMESTAMP TICK ENGINE =================
   useEffect(() => {
     const timer = setInterval(() => {
+      const now = Date.now();
+
+      // Subject Block Timers
       setSlots(prevSlots =>
         prevSlots.map(slot => {
-          if (slot.isRunning && slot.timeLeft > 0) {
-            if (slot.timeLeft === 1) triggerDeviceAlert(`⏰ ${slot.subject} Complete!`, "Session completed! Record errors in question bank.");
-            return { ...slot, timeLeft: slot.timeLeft - 1 };
+          if (slot.isRunning && slot.targetEndTime) {
+            const diff = Math.round((slot.targetEndTime - now) / 1000);
+            if (diff <= 0) {
+              triggerDeviceAlert(`⏰ ${slot.subject} Block Finished!`, "Excellent focus session completed! Log questions into your Error Bank.");
+              return { ...slot, timeLeft: 0, isRunning: false, targetEndTime: null };
+            }
+            return { ...slot, timeLeft: diff };
           }
           return slot;
         })
       );
 
+      // Pomodoro Engine
       setPomoState(prev => {
-        if (!prev.isRunning || prev.timeLeft <= 0) return prev;
-        if (prev.timeLeft === 1) {
+        if (!prev.isRunning || !prev.targetEndTime) return prev;
+        const diff = Math.round((prev.targetEndTime - now) / 1000);
+        if (diff <= 0) {
           if (prev.mode === 'work') {
-            triggerDeviceAlert("🔥 50-Min Session Complete!", "Take a 10-minute restorative break.");
-            return { ...prev, mode: 'break', timeLeft: prev.breakDuration * 60, completedSessions: prev.completedSessions + 1 };
+            triggerDeviceAlert("🔥 50-Min Focus Completed!", "Awesome study session! Take a 10-minute restorative break.");
+            const newTarget = Date.now() + (prev.breakDuration * 60 * 1000);
+            return {
+              ...prev,
+              mode: 'break',
+              timeLeft: prev.breakDuration * 60,
+              targetEndTime: newTarget,
+              isRunning: true,
+              completedSessions: prev.completedSessions + 1
+            };
           } else {
-            triggerDeviceAlert("☕ 10-Min Break Over!", "Ready to start your next 50-minute study block?");
-            return { ...prev, mode: 'work', timeLeft: prev.workDuration * 60 };
+            triggerDeviceAlert("☕ 10-Min Break Over!", "Ready to begin your next 50-minute study sprint?");
+            const newTarget = Date.now() + (prev.workDuration * 60 * 1000);
+            return {
+              ...prev,
+              mode: 'work',
+              timeLeft: prev.workDuration * 60,
+              targetEndTime: newTarget,
+              isRunning: true
+            };
           }
         }
-        return { ...prev, timeLeft: prev.timeLeft - 1 };
+        return { ...prev, timeLeft: diff };
       });
     }, 1000);
+
     return () => clearInterval(timer);
   }, []);
+
+  // Timer Controls
+  const toggleBlockTimer = (id) => {
+    setSlots(slots.map(s => {
+      if (s.id === id) {
+        if (s.isRunning) {
+          return { ...s, isRunning: false, targetEndTime: null };
+        } else {
+          const currentRemaining = s.timeLeft > 0 ? s.timeLeft : s.durationMinutes * 60;
+          return { ...s, isRunning: true, timeLeft: currentRemaining, targetEndTime: Date.now() + (currentRemaining * 1000) };
+        }
+      }
+      return s;
+    }));
+  };
+
+  const resetBlockTimer = (id) => {
+    setSlots(slots.map(s => s.id === id ? { ...s, timeLeft: s.durationMinutes * 60, isRunning: false, targetEndTime: null } : s));
+  };
+
+  const togglePomoTimer = () => {
+    if (pomoState.isRunning) {
+      setPomoState({ ...pomoState, isRunning: false, targetEndTime: null });
+    } else {
+      const remaining = pomoState.timeLeft > 0 ? pomoState.timeLeft : (pomoState.mode === 'work' ? pomoState.workDuration : pomoState.breakDuration) * 60;
+      setPomoState({
+        ...pomoState,
+        isRunning: true,
+        timeLeft: remaining,
+        targetEndTime: Date.now() + (remaining * 1000)
+      });
+    }
+  };
+
+  const resetPomoTimer = () => {
+    const duration = pomoState.mode === 'work' ? pomoState.workDuration : pomoState.breakDuration;
+    setPomoState({
+      ...pomoState,
+      timeLeft: duration * 60,
+      isRunning: false,
+      targetEndTime: null
+    });
+  };
 
   const formatTime = (seconds) => {
     const hrs = Math.floor(seconds / 3600);
@@ -354,12 +474,11 @@ export default function App() {
 
   const executionAnalytics = generateExecutionAnalytics();
 
-  // DWAR Journal Handlers
+  // DWAR Handlers
   const handleSaveDwar = (e) => {
     e.preventDefault();
     if (!dwarForm.did.trim() && !dwarForm.will.trim()) return;
     
-    // Replace if date already exists or add new
     const existingIndex = dwarLogs.findIndex(d => d.date === dwarForm.date);
     if (existingIndex > -1) {
       const updated = [...dwarLogs];
@@ -823,20 +942,17 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 1: D.W.A.R. FRAMEWORK SELF-ANALYSIS (DR. ABHIMANYU KUMAWAT) */}
+        {/* TAB 1: D.W.A.R. SELF-ANALYSIS */}
         {activeTab === 'dwar' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h2 className="text-lg font-bold flex items-center space-x-2">
-                  <Sparkles className="w-5 h-5 text-amber-400" />
-                  <span>D.W.A.R. Daily Self-Analysis Framework</span>
-                </h2>
-                <p className="text-xs text-slate-400">Dr. Abhimanyu Kumawat's 4-Pillar Daily Self Evaluation: Did • Will • Achievement • Regret</p>
-              </div>
+            <div>
+              <h2 className="text-lg font-bold flex items-center space-x-2">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                <span>D.W.A.R. Daily Self-Analysis Framework</span>
+              </h2>
+              <p className="text-xs text-slate-400">Dr. Abhimanyu Kumawat's 4-Pillar Daily Self Evaluation: Did • Will • Achievement • Regret</p>
             </div>
 
-            {/* DWAR Logging Box */}
             <form onSubmit={handleSaveDwar} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
@@ -852,7 +968,6 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                {/* D - Did */}
                 <div className="space-y-1.5">
                   <label className="block font-bold text-emerald-400 flex items-center space-x-1">
                     <CheckCircle2 className="w-3.5 h-3.5" />
@@ -868,7 +983,6 @@ export default function App() {
                   />
                 </div>
 
-                {/* W - Will */}
                 <div className="space-y-1.5">
                   <label className="block font-bold text-cyan-400 flex items-center space-x-1">
                     <Flame className="w-3.5 h-3.5" />
@@ -884,7 +998,6 @@ export default function App() {
                   />
                 </div>
 
-                {/* A - Achievement */}
                 <div className="space-y-1.5">
                   <label className="block font-bold text-amber-400 flex items-center space-x-1">
                     <Award className="w-3.5 h-3.5" />
@@ -899,7 +1012,6 @@ export default function App() {
                   />
                 </div>
 
-                {/* R - Regret */}
                 <div className="space-y-1.5">
                   <label className="block font-bold text-rose-400 flex items-center space-x-1">
                     <AlertTriangle className="w-3.5 h-3.5" />
@@ -941,7 +1053,6 @@ export default function App() {
               </div>
             </form>
 
-            {/* DWAR Telemetry Graph */}
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
               <h3 className="text-sm font-bold text-slate-200">D.W.A.R. Self-Discipline Rating Trend (/10)</h3>
               <div className="h-64 w-full">
@@ -963,7 +1074,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Historical DWAR Feed */}
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-slate-200">Historical D.W.A.R. Journal Entries</h3>
               {dwarLogs.length === 0 ? (
@@ -1153,7 +1263,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: TIMERS & MACRO SCHEDULE */}
+        {/* TAB 3: TIMERS & PERSISTENT BLOCKS */}
         {activeTab === 'daily' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1183,11 +1293,11 @@ export default function App() {
                     </div>
                     <div>
                       <h3 className="text-3xl font-bold font-mono tracking-tight text-white">{formatTime(slot.timeLeft)}</h3>
-                      <p className="text-xs text-slate-400 mt-1">Focus Window</p>
+                      <p className="text-xs text-slate-400 mt-1">Focus Window {slot.isRunning && <span className="text-emerald-400 font-bold ml-1 animate-pulse">● Running</span>}</p>
                     </div>
                     <div className="flex space-x-2 mt-4 pt-4 border-t border-slate-800/60">
                       <button
-                        onClick={() => setSlots(slots.map(s => s.id === slot.id ? { ...s, isRunning: !s.isRunning } : { ...s, isRunning: false }))}
+                        onClick={() => toggleBlockTimer(slot.id)}
                         className={`flex-1 flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl font-medium text-xs transition ${
                           slot.isRunning ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-amber-600 hover:bg-amber-500 text-white'
                         }`}
@@ -1195,7 +1305,7 @@ export default function App() {
                         {slot.isRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                         <span>{slot.isRunning ? 'Pause' : 'Start'}</span>
                       </button>
-                      <button onClick={() => setSlots(slots.map(s => s.id === slot.id ? { ...s, timeLeft: s.durationMinutes * 60, isRunning: false } : s))} className="p-2 rounded-xl bg-slate-800 text-slate-400">
+                      <button onClick={() => resetBlockTimer(slot.id)} className="p-2 rounded-xl bg-slate-800 text-slate-400">
                         <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -1214,7 +1324,7 @@ export default function App() {
 
                 <div className="flex justify-center space-x-3 pt-2">
                   <button 
-                    onClick={() => setPomoState({ ...pomoState, isRunning: !pomoState.isRunning })}
+                    onClick={togglePomoTimer}
                     className={`px-6 py-3 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
                       pomoState.isRunning ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-amber-600 hover:bg-amber-500 text-white'
                     }`}
@@ -1223,7 +1333,7 @@ export default function App() {
                     <span>{pomoState.isRunning ? 'Pause Pomodoro' : 'Start 50-Min Focus'}</span>
                   </button>
                   <button 
-                    onClick={() => setPomoState({ ...pomoState, timeLeft: (pomoState.mode === 'work' ? pomoState.workDuration : pomoState.breakDuration) * 60, isRunning: false })}
+                    onClick={resetPomoTimer}
                     className="p-3 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
                   >
                     <RotateCcw className="w-4 h-4" />
@@ -1693,7 +1803,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: ADD NEW QUESTION WITH IMAGE UPLOAD */}
+      {/* MODAL: ADD NEW QUESTION */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
