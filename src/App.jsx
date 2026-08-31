@@ -68,13 +68,40 @@ export default function App() {
   const [newQ, setNewQ] = useState({ subject: 'Physics', chapter: '', difficulty: 'Moderate', timeSpent: 60, status: 'Solved' });
   const [newMock, setNewMock] = useState({ name: '', date: '', physics: 0, chemistry: 0, biology: 0, negativeMarks: 0, rank: 0 });
 
+  // Web Audio Synth Chime
+  const playAlertSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+      
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+      
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.8);
+    } catch (e) {
+      console.log('Audio notification error:', e);
+    }
+  };
+
   // Fetch Google Sheets Schedule
   const fetchGoogleSheet = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch(GOOGLE_SCRIPT_URL);
+      const res = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'GET',
+        redirect: 'follow'
+      });
       const json = await res.json();
-      if (json.status === 'success' && json.data) {
+      if (json && json.status === 'success' && Array.isArray(json.data)) {
         setSheetSchedule(json.data);
       }
     } catch (err) {
@@ -93,12 +120,15 @@ export default function App() {
   useEffect(() => { localStorage.setItem('neet_sm2_deck', JSON.stringify(revisionDeck)); }, [revisionDeck]);
   useEffect(() => { localStorage.setItem('neet_mock_telemetry', JSON.stringify(mockTests)); }, [mockTests]);
 
-  // Timers
+  // Timers with auto chime trigger
   useEffect(() => {
     const timer = setInterval(() => {
       setSlots(prevSlots =>
         prevSlots.map(slot => {
           if (slot.isRunning && slot.timeLeft > 0) {
+            if (slot.timeLeft === 1) {
+              playAlertSound();
+            }
             return { ...slot, timeLeft: slot.timeLeft - 1 };
           }
           return slot;
